@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="desktop-pets">
+  <schema id="org.gnome.shell.extensions.desktop-pets" path="/org/gnome/shell/extensions/desktop-pets/">
+    <key name="floor-z-order" type="s">
+      <choices>
+        <choice value="front"/>
+        <choice value="back"/>
+      </choices>
+      <default>'front'</default>
+      <summary>Floor Z-Order</summary>
+      <description>Whether pets on the floor appear in front of or behind all windows.</description>
+    </key>
+    <key name="pet-count" type="i">
+      <default>3</default>
+      <summary>Number of Pets</summary>
+      <description>The number of kittens to spawn.</description>
+    </key>
+  </schema>
+</schemalist>

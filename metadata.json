@@ -1,0 +1,15 @@
+{
+    "uuid": "desktop-pets@mcast.gnomext.com",
+    "name": "Desktop Pets",
+    "description": "Animated kittens walking on your windows.",
+    "shell-version": [
+        "45",
+        "46",
+        "47",
+        "48",
+        "49"
+    ],
+    "url": "https://github.com/mauro/desktop-pets",
+    "version": 1,
+    "settings-schema": "org.gnome.shell.extensions.desktop-pets"
+}
