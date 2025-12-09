@@ -172,6 +172,8 @@ const Pet = GObject.registerClass(
                 if (parent !== global.window_group) {
                     if (parent === Main.layoutManager.uiGroup) {
                         Main.layoutManager.removeChrome(this.actor);
+                    } else if (parent === Main.layoutManager._backgroundGroup || parent === Main.layoutManager.backgroundGroup) {
+                        parent.remove_child(this.actor);
                     } else if (parent) {
                         parent.remove_child(this.actor);
                     }
@@ -191,17 +193,17 @@ const Pet = GObject.registerClass(
                         Main.layoutManager.addChrome(this.actor);
                     }
                 } else {
-                    // Back mode: Put in window_group but at the very bottom
-                    if (parent !== global.window_group) {
+                    // Back mode: Put in _backgroundGroup as requested
+                    let bgGroup = Main.layoutManager._backgroundGroup || Main.layoutManager.backgroundGroup;
+
+                    if (bgGroup && parent !== bgGroup) {
                         if (parent === Main.layoutManager.uiGroup) {
                             Main.layoutManager.removeChrome(this.actor);
                         } else if (parent) {
                             parent.remove_child(this.actor);
                         }
-                        global.window_group.add_child(this.actor);
+                        bgGroup.add_child(this.actor);
                     }
-                    // Send to back of window group
-                    global.window_group.set_child_at_index(this.actor, 0);
                 }
             }
 
