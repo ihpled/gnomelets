@@ -120,6 +120,69 @@ const Pet = GObject.registerClass(
             return this._savedFacing;
         }
 
+        updateScale() {
+            let oldH = this._displayH;
+
+            const TARGET_HEIGHT = this._settings.get_int('pet-scale');
+            const scaleFactor = TARGET_HEIGHT / this._frameHeight;
+
+            this._displayW = Math.floor(this._frameWidth * scaleFactor);
+            this._displayH = Math.floor(TARGET_HEIGHT);
+
+            // Update Actors
+            // Container
+            this.actor.set_width(this._displayW);
+            this.actor.set_height(this._displayH);
+
+            // Sprite
+            this._spriteW = this._displayW * 6;
+            this._spriteH = this._displayH;
+
+            this._spriteActor.set_width(this._spriteW);
+            this._spriteActor.set_height(this._spriteH);
+
+            let fileUrl = `file://${this._imagePath}`;
+            this._spriteActor.set_style(`
+                background-image: url("${fileUrl}");
+                background-size: ${this._spriteW}px ${this._spriteH}px;
+                background-repeat: no-repeat;
+            `);
+
+            // Adjust Y position so feet stay at the same level
+            // newY + newH = oldY + oldH  =>  newY = oldY + oldH - newH
+            this._y = this._y + oldH - this._displayH;
+            this.actor.set_position(this._x, this._y);
+
+            // Force frame update
+            this.setFrame(0); // Temporary reset to ensure visuals update immediately
+            this._updateAnimation();
+        }
+
+        serialize() {
+            return {
+                x: this._x,
+                y: this._y,
+                vx: this._vx,
+                vy: this._vy,
+                state: this._state,
+                facing: this._savedFacing,
+                idleTimer: this._idleTimer
+            };
+        }
+
+        deserialize(data) {
+            if (!data) return;
+            if (data.x !== undefined) this._x = data.x;
+            if (data.y !== undefined) this._y = data.y;
+            if (data.vx !== undefined) this._vx = data.vx;
+            if (data.vy !== undefined) this._vy = data.vy;
+            if (data.state !== undefined) this._state = data.state;
+            if (data.facing !== undefined) this._savedFacing = data.facing;
+            if (data.idleTimer !== undefined) this._idleTimer = data.idleTimer;
+
+            this.actor.set_position(this._x, this._y);
+        }
+
         /**
          * Main update loop for the pet.
          * Called by PetManager every tick.
@@ -408,22 +471,30 @@ class PetManager {
         this._imagePath = null;
         this._imgW = 0;
         this._imgH = 0;
+        this._cacheFile = GLib.get_user_cache_dir() + '/desktop-pets-state.json';
 
-        // Resolve image path
+        this._updateImageSource();
+    }
+
+    _updateImageSource() {
+        let type = this._settings.get_string('pet-type');
+        if (!type) type = 'kitten';
+
         let file = Gio.File.new_for_uri(import.meta.url);
         let dir = file.get_parent();
-        let imageFile = dir.get_child('images').get_child('kitten.png');
+        let imageFile = dir.get_child('images').get_child(`${type}.png`);
         this._imagePath = imageFile.get_path();
 
         // Pre-load image dimensions info using GdkPixbuf
-        // This allows us to support arbitrary high-res sprites
         try {
             let pb = GdkPixbuf.Pixbuf.new_from_file(this._imagePath);
             this._imgW = pb.get_width();
             this._imgH = pb.get_height();
-            console.log(`[Desktop Pets] Loaded image: ${this._imgW}x${this._imgH}`);
+            console.log(`[Desktop Pets] Loaded image for ${type}: ${this._imgW}x${this._imgH}`);
         } catch (e) {
-            console.error(`[Desktop Pets] Failed to load image info: ${e.message}`);
+            console.error(`[Desktop Pets] Failed to load image info for ${type}: ${e.message}`);
+            this._imgW = 0;
+            this._imgH = 0;
         }
     }
 
@@ -432,12 +503,21 @@ class PetManager {
 
         // Listen for changes
         this._settingsSignal = this._settings.connect('changed', (settings, key) => {
-            if (key === 'pet-count' || key === 'pet-scale') {
-                this._reload();
+            if (key === 'pet-count') {
+                this._updateCount();
+            } else if (key === 'pet-scale') {
+                this._updateScale();
+            } else if (key === 'pet-type') {
+                this._updateImageSource();
+                this._hardReset();
+            } else if (key === 'reset-trigger') {
+                this._hardReset();
             }
         });
 
-        this._spawnPets();
+        // Load saved state if available
+        let savedState = this._loadState();
+        this._spawnPets(savedState);
 
         // Start the Main Loop
         this._timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, UPDATE_INTERVAL_MS, () => {
@@ -447,6 +527,9 @@ class PetManager {
     }
 
     disable() {
+        // Save current state before destroying
+        this._saveState();
+
         if (this._timerId) {
             GLib.source_remove(this._timerId);
             this._timerId = 0;
@@ -460,22 +543,93 @@ class PetManager {
         this._destroyPets();
     }
 
-    _reload() {
-        this._destroyPets();
-        this._spawnPets();
+    _loadState() {
+        try {
+            if (GLib.file_test(this._cacheFile, GLib.FileTest.EXISTS)) {
+                let [success, contents] = GLib.file_get_contents(this._cacheFile);
+                if (success) {
+                    let decoder = new TextDecoder('utf-8');
+                    let json = decoder.decode(contents);
+                    let data = JSON.parse(json);
+                    console.log(`[Desktop Pets] Loaded state for ${data.length} pets.`);
+                    return data;
+                }
+            }
+        } catch (e) {
+            console.warn(`[Desktop Pets] Failed to load state: ${e.message}`);
+        }
+        return null; // No saved state
     }
 
-    _spawnPets() {
+    _saveState() {
+        try {
+            let data = this._pets.map(p => p.serialize());
+            let json = JSON.stringify(data);
+            GLib.file_set_contents(this._cacheFile, json);
+            console.log(`[Desktop Pets] Saved state for ${data.length} pets.`);
+        } catch (e) {
+            console.warn(`[Desktop Pets] Failed to save state: ${e.message}`);
+        }
+    }
+
+    _updateScale() {
+        console.log('[Desktop Pets] Updating scale for existing pets...');
+        for (let p of this._pets) {
+            p.updateScale();
+        }
+    }
+
+    _hardReset() {
+        console.log('[Desktop Pets] Hard reset triggered.');
+        this._destroyPets();
+
+        // Delete cache file to prevent restoring old state
+        try {
+            let f = Gio.File.new_for_path(this._cacheFile);
+            if (f.query_exists(null)) {
+                f.delete(null);
+                console.log('[Desktop Pets] Cache cleared.');
+            }
+        } catch (e) {
+            console.warn(`[Desktop Pets] Failed to delete cache: ${e.message}`);
+        }
+
+        this._spawnPets(null); // safely spawn new random pets
+    }
+
+    _updateCount() {
+        let count = this._settings.get_int('pet-count');
+        let current = this._pets.length;
+
+        if (count > current) {
+            // Add new pets
+            for (let i = 0; i < (count - current); i++) {
+                let p = new Pet(this._imagePath, this._imgW, this._imgH, this._settings);
+                this._pets.push(p);
+            }
+        } else if (count < current) {
+            // Remove pets
+            for (let i = 0; i < (current - count); i++) {
+                let p = this._pets.pop();
+                p.destroy();
+            }
+        }
+    }
+
+    _spawnPets(savedState) {
         // Spawn pets based on user setting
         let count = this._settings.get_int('pet-count');
         console.log(`[Desktop Pets] Spawning ${count} pets.`);
 
         for (let i = 0; i < count; i++) {
             let p = new Pet(this._imagePath, this._imgW, this._imgH, this._settings);
+            // Restore state if available for this index
+            if (savedState && savedState[i]) {
+                p.deserialize(savedState[i]);
+            }
             this._pets.push(p);
         }
     }
-
     _destroyPets() {
         for (let p of this._pets) {
             p.destroy();
@@ -498,6 +652,9 @@ class PetManager {
                 if (actor.meta_window) {
                     let rect = actor.meta_window.get_frame_rect();
                     if (actor.meta_window.minimized) continue;
+
+                    // Skip maximized windows to prevent pets from being hidden/off-screen
+                    if (actor.meta_window.is_maximized()) continue;
 
                     this._windows.push({
                         rect: rect,
@@ -534,3 +691,4 @@ export default class DesktopPetsExtension extends Extension {
         this._settings = null;
     }
 }
+

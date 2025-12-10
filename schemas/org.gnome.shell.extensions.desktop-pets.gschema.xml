@@ -10,6 +10,18 @@
       <summary>Floor Z-Order</summary>
       <description>Whether pets on the floor appear in front of or behind all windows.</description>
     </key>
+    <key name="pet-type" type="s">
+      <choices>
+        <choice value="kitten"/>
+        <choice value="puppy"/>
+        <choice value="mouse"/>
+        <choice value="squirrel"/>
+        <choice value="santa"/>
+      </choices>
+      <default>'kitten'</default>
+      <summary>Pet Character</summary>
+      <description>The kind of pet to display.</description>
+    </key>
     <key name="pet-count" type="i">
       <default>3</default>
       <summary>Number of Pets</summary>
@@ -19,6 +31,11 @@
       <default>64</default>
       <summary>Pet Scale</summary>
       <description>The target height of the pet in pixels.</description>
+    </key>
+    <key name="reset-trigger" type="b">
+      <default>false</default>
+      <summary>Reset Trigger</summary>
+      <description>Toggle this to respawn all pets.</description>
     </key>
   </schema>
 </schemalist>

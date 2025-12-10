@@ -12,6 +12,25 @@ export default class DesktopPetsPreferences extends ExtensionPreferences {
         const group = new Adw.PreferencesGroup();
         page.add(group);
 
+        // Pet Character Row
+        const typeRow = new Adw.ComboRow({
+            title: 'Pet Character',
+            model: new Gtk.StringList({
+                strings: ['Kitten', 'Puppy', 'Mouse', 'Squirrel', 'Santa Claus'],
+            }),
+        });
+
+        const typeMap = ['kitten', 'puppy', 'mouse', 'squirrel', 'santa'];
+        const currentType = settings.get_string('pet-type');
+        const initialIndex = typeMap.indexOf(currentType);
+        typeRow.set_selected(initialIndex >= 0 ? initialIndex : 0);
+
+        typeRow.connect('notify::selected', () => {
+            const selectedType = typeMap[typeRow.selected];
+            settings.set_string('pet-type', selectedType);
+        });
+        group.add(typeRow);
+
         // Pet Count Row
         const countRow = new Adw.ActionRow({ title: 'Number of Pets' });
         const countSpin = new Gtk.SpinButton({
@@ -66,6 +85,25 @@ export default class DesktopPetsPreferences extends ExtensionPreferences {
         });
 
         group.add(zOrderRow);
+
+        // Actions Group
+        const actionsGroup = new Adw.PreferencesGroup({ title: 'Actions' });
+        page.add(actionsGroup);
+
+        const respawnRow = new Adw.ActionRow({ title: 'Reset State' });
+        const respawnButton = new Gtk.Button({
+            label: 'Respawn Pets',
+            valign: Gtk.Align.CENTER,
+        });
+
+        respawnButton.connect('clicked', () => {
+            // Toggle the boolean value to trigger a change signal
+            let current = settings.get_boolean('reset-trigger');
+            settings.set_boolean('reset-trigger', !current);
+        });
+
+        respawnRow.add_suffix(respawnButton);
+        actionsGroup.add(respawnRow);
 
         window.add(page);
     }
