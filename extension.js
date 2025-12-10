@@ -61,7 +61,7 @@ const Pet = GObject.registerClass(
             this._frameWidth = sheetWidth / 6; // Assuming 6 frames horizontally
             this._frameHeight = sheetHeight;
 
-            const TARGET_HEIGHT = 64;
+            const TARGET_HEIGHT = this._settings.get_int('pet-scale');
             const scaleFactor = TARGET_HEIGHT / this._frameHeight;
 
             this._displayW = Math.floor(this._frameWidth * scaleFactor);
@@ -140,6 +140,7 @@ const Pet = GObject.registerClass(
             }
 
             // Update Position
+            let prevY = this._y;
             this._x += this._vx;
             this._y += this._vy;
 
@@ -179,8 +180,10 @@ const Pet = GObject.registerClass(
                     let rect = win.rect;
 
                     // Hitbox: Feet within window width AND close to top edge
+                    // We use prevY to check if we *crossed* the threshold to prevent tunneling at high speeds
+                    let prevFeetY = prevY + this._displayH;
                     let inHorizontalRange = (feetX >= rect.x) && (feetX <= rect.x + rect.width);
-                    let inVerticalRange = (feetY >= rect.y) && (feetY <= rect.y + 25);
+                    let inVerticalRange = (feetY >= rect.y) && (prevFeetY <= rect.y + 25);
 
                     if (inHorizontalRange && inVerticalRange) {
                         // Landed!
@@ -269,33 +272,6 @@ const Pet = GObject.registerClass(
                 if (this._state === State.FALLING || this._state === State.JUMPING) {
                     this._vy = 0;
                     this._pickNewAction(); // Decide whether to walk or sit, and set the state accordingly
-                }
-
-                // Check if we walked off a ledge (Support check)
-                if (this._state === State.WALKING || this._state === State.IDLE) {
-                    let midX = this._x + this._displayW / 2;
-                    let bottomY = this._y + this._displayH;
-                    let support = false;
-
-                    // Check if supported by floor
-                    if (Math.abs(bottomY - global.stage.height) < 5) {
-                        support = true;
-                    } else {
-                        // Check if supported by any window
-                        for (let win of windows) {
-                            let rect = win.rect;
-                            let inH = (midX >= rect.x) && (midX <= rect.x + rect.width);
-                            let inV = Math.abs(bottomY - rect.y) < 10;
-                            if (inH && inV) {
-                                support = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!support) {
-                        this._state = State.FALLING;
-                    }
                 }
             } else {
                 // In air
@@ -454,14 +430,14 @@ class PetManager {
     enable() {
         if (!this._imagePath || this._imgW === 0) return;
 
-        // Spawn pets based on user setting
-        let count = this._settings.get_int('pet-count');
-        console.log(`[Desktop Pets] Enabling... Spawning ${count} pets.`);
+        // Listen for changes
+        this._settingsSignal = this._settings.connect('changed', (settings, key) => {
+            if (key === 'pet-count' || key === 'pet-scale') {
+                this._reload();
+            }
+        });
 
-        for (let i = 0; i < count; i++) {
-            let p = new Pet(this._imagePath, this._imgW, this._imgH, this._settings);
-            this._pets.push(p);
-        }
+        this._spawnPets();
 
         // Start the Main Loop
         this._timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, UPDATE_INTERVAL_MS, () => {
@@ -476,6 +452,31 @@ class PetManager {
             this._timerId = 0;
         }
 
+        if (this._settingsSignal) {
+            this._settings.disconnect(this._settingsSignal);
+            this._settingsSignal = 0;
+        }
+
+        this._destroyPets();
+    }
+
+    _reload() {
+        this._destroyPets();
+        this._spawnPets();
+    }
+
+    _spawnPets() {
+        // Spawn pets based on user setting
+        let count = this._settings.get_int('pet-count');
+        console.log(`[Desktop Pets] Spawning ${count} pets.`);
+
+        for (let i = 0; i < count; i++) {
+            let p = new Pet(this._imagePath, this._imgW, this._imgH, this._settings);
+            this._pets.push(p);
+        }
+    }
+
+    _destroyPets() {
         for (let p of this._pets) {
             p.destroy();
         }

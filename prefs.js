@@ -26,6 +26,20 @@ export default class DesktopPetsPreferences extends ExtensionPreferences {
         countRow.add_suffix(countSpin);
         group.add(countRow);
 
+        // Pet Scale Row
+        const scaleRow = new Adw.ActionRow({ title: 'Pet Size (px)' });
+        const scaleSpin = new Gtk.SpinButton({
+            adjustment: new Gtk.Adjustment({
+                lower: 32,
+                upper: 256,
+                step_increment: 8,
+            }),
+            valign: Gtk.Align.CENTER,
+        });
+        settings.bind('pet-scale', scaleSpin, 'value', Gio.SettingsBindFlags.DEFAULT);
+        scaleRow.add_suffix(scaleSpin);
+        group.add(scaleRow);
+
         // Floor Z-Order Row
         const zOrderRow = new Adw.ComboRow({
             title: 'Floor Z-Order',

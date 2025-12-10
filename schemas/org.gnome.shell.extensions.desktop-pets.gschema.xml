@@ -15,5 +15,10 @@
       <summary>Number of Pets</summary>
       <description>The number of kittens to spawn.</description>
     </key>
+    <key name="pet-scale" type="i">
+      <default>64</default>
+      <summary>Pet Scale</summary>
+      <description>The target height of the pet in pixels.</description>
+    </key>
   </schema>
 </schemalist>
