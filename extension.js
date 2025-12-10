@@ -48,7 +48,7 @@ const Pet = GObject.registerClass(
             // --- Animation State ---
             this._frame = 0;           // Current sprite frame index
             this._animationTimer = 0;  // Counter for animation timing
-            this._facingRight = Math.random() > 0.5; // Walking direction
+            this._savedFacing = Math.random() > 0.5; // Initial Direction (replaces _facingRight)
             this._idleTimer = 0;       // Countdown for how long to sit idle
 
             this._imagePath = imagePath;
@@ -95,10 +95,10 @@ const Pet = GObject.registerClass(
             // Apply the sprite sheet image via CSS
             let fileUrl = `file://${this._imagePath}`;
             this._spriteActor.set_style(`
-             background-image: url("${fileUrl}");
-             background-size: ${this._spriteW}px ${this._spriteH}px;
-             background-repeat: no-repeat;
-        `);
+                background-image: url("${fileUrl}");
+                background-size: ${this._spriteW}px ${this._spriteH}px;
+                background-repeat: no-repeat;
+            `);
 
             this.actor.add_child(this._spriteActor);
 
@@ -108,6 +108,16 @@ const Pet = GObject.registerClass(
             this.actor.set_position(this._x, this._y);
 
             this._updateAnimation();
+        }
+
+        // Property to define facing based on Velocity X
+        // Automatically updates saved facing when moving, otherwise returns last direction.
+        get facingRight() {
+            let sign = Math.sign(this._vx);
+            if (sign !== 0 && !isNaN(sign)) {
+                this._savedFacing = (sign > 0);
+            }
+            return this._savedFacing;
         }
 
         /**
@@ -144,16 +154,14 @@ const Pet = GObject.registerClass(
                     return; // Skip rest of frame
                 }
             } else {
-                // Routine Wall Bounce (if falling or on window)
+                // Routine Wall Bounce on windows/air
                 let maxX = global.stage.width - this._displayW;
                 if (this._x < 0) {
                     this._x = 0;
-                    this._vx *= -1;
-                    this._facingRight = !this._facingRight;
+                    this._vx *= -1; // Just flip velocity, facing updates automatically
                 } else if (this._x > maxX) {
                     this._x = maxX;
                     this._vx *= -1;
-                    this._facingRight = !this._facingRight;
                 }
             }
 
@@ -209,7 +217,7 @@ const Pet = GObject.registerClass(
                     // Cleanly remove from previous container
                     if (parent === Main.layoutManager.uiGroup) {
                         Main.layoutManager.removeChrome(this.actor);
-                    } else if (parent === Main.layoutManager._backgroundGroup || parent === Main.layoutManager.backgroundGroup) {
+                    } else if (parent === Main.layoutManager._backgroundGroup) {
                         parent.remove_child(this.actor);
                     } else if (parent) {
                         parent.remove_child(this.actor);
@@ -230,7 +238,9 @@ const Pet = GObject.registerClass(
                     // 'Front': Default Overlay mode. 
                     // Put in 'uiGroup' (Chrome), which is above everything.
                     if (parent !== Main.layoutManager.uiGroup) {
-                        if (parent) parent.remove_child(this.actor);
+                        if (parent) {
+                            parent.remove_child(this.actor);
+                        }
                         Main.layoutManager.addChrome(this.actor);
                     }
                 } else {
@@ -238,7 +248,7 @@ const Pet = GObject.registerClass(
                     // We want it behind all windows but above the wallpaper.
                     // We use '_backgroundGroup' (the container for desktop icons/background).
                     // It's a private property in newer Shell versions, so we attempt access.
-                    let bgGroup = Main.layoutManager._backgroundGroup || Main.layoutManager.backgroundGroup;
+                    let bgGroup = Main.layoutManager._backgroundGroup;
 
                     if (bgGroup && parent !== bgGroup) {
                         // Remove from UI/Window group
@@ -257,9 +267,8 @@ const Pet = GObject.registerClass(
             if (onGround) {
                 // Just landed?
                 if (this._state === State.FALLING || this._state === State.JUMPING) {
-                    this._state = State.WALKING;
                     this._vy = 0;
-                    this._pickNewAction(); // Decide whether to walk or sit
+                    this._pickNewAction(); // Decide whether to walk or sit, and set the state accordingly
                 }
 
                 // Check if we walked off a ledge (Support check)
@@ -297,7 +306,7 @@ const Pet = GObject.registerClass(
 
             // --- AI Behavior ---
             if (this._state === State.WALKING) {
-                this._vx = this._facingRight ? WALK_SPEED : -WALK_SPEED;
+                // Maintain current velocity (direction set by _pickNewAction)
                 this._idleTimer = 0;
 
                 // Small chance to stop walking
@@ -342,7 +351,9 @@ const Pet = GObject.registerClass(
             let r = Math.random();
             if (r < 0.6) {
                 this._state = State.WALKING;
-                this._facingRight = Math.random() > 0.5;
+                // Set velocity directly based on random choice
+                let dir = (Math.random() > 0.5) ? 1 : -1;
+                this._vx = dir * WALK_SPEED;
             } else {
                 this._state = State.IDLE;
                 this._idleTimer = Math.random() * 60 + 20;
@@ -352,7 +363,9 @@ const Pet = GObject.registerClass(
         _performJump() {
             this._state = State.JUMPING;
             this._vy = JUMP_VELOCITY;
-            this._vx = this._facingRight ? WALK_SPEED * 2 : -WALK_SPEED * 2;
+            // Keep current facing direction
+            let dir = this.facingRight ? 1 : -1;
+            this._vx = dir * WALK_SPEED * 2;
         }
 
         _updateAnimation() {
@@ -384,7 +397,7 @@ const Pet = GObject.registerClass(
 
             // Handle facing direction via scaling (flipping)
             this.actor.set_pivot_point(0.5, 0.5);
-            if (this._facingRight) {
+            if (this.facingRight) {
                 this.actor.scale_x = 1;
             } else {
                 this.actor.scale_x = -1;
