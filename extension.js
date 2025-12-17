@@ -1,17 +1,13 @@
-import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
-import Meta from 'gi://Meta';
-import Shell from 'gi://Shell';
 import GdkPixbuf from 'gi://GdkPixbuf';
-import Cogl from 'gi://Cogl'; // Necessario per i formati pixel
 
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-// Configuration constants
+// --- Configuration Constants ---
 const UPDATE_INTERVAL_MS = 50; // Update loop runs every 50ms (~20 FPS)
 const GRAVITY = 2;             // Vertical acceleration per frame
 const WALK_SPEED = 3;          // Horizontal pixels per frame
@@ -25,14 +21,17 @@ const State = {
     JUMPING: 'JUMPING'
 };
 
+/**
+ * Utility to check if a window is maximized
+ */
 function isWindowMaximized(window) {
     return window.maximized_horizontally && window.maximized_vertically;
 }
 
 /**
  * Gnomelet Class
- * Represents a single animated kitten on the screen.
- * REFACTOR: Uses Pre-sliced Clutter.Images loaded by Manager.
+ * Represents a single animated character on the screen.
+ * Uses pre-sliced images loaded by the Manager.
  */
 const Gnomelet = GObject.registerClass(
     class Gnomelet extends GObject.Object {
@@ -41,8 +40,7 @@ const Gnomelet = GObject.registerClass(
 
             this._settings = settings;
 
-            // --- Initialization ---
-            // Start falling from the top of the screen at a random X position
+            // --- State Initialization ---
             this._state = State.FALLING;
             this._vx = 0; // Velocity X
             this._vy = 0; // Velocity Y
@@ -50,44 +48,41 @@ const Gnomelet = GObject.registerClass(
             // --- Animation State ---
             this._frame = 0; // Current sprite frame index
             this._animationTimer = 0; // Counter for animation timing
-            this._savedFacing = Math.random() > 0.5; // Initial Direction (replaces _facingRight)
-            this._idleTimer = 0; // Countdown for how long to sit idle
+            this._savedFacing = Math.random() > 0.5; // Initial Direction
+            this._idleTimer = 0; // Countdown for how long to stay idle
 
             // --- Configurable Dimensions ---
-            // We use the passed frame width/height directly
             this._frameWidth = frameWidth;
             this._frameHeight = frameHeight;
 
             const TARGET_HEIGHT = this._settings.get_int('gnomelet-scale');
             const scaleFactor = TARGET_HEIGHT / this._frameHeight;
 
+            // displayW/H are used for physics and collision logic
             this._displayW = Math.floor(this._frameWidth * scaleFactor);
             this._displayH = Math.floor(TARGET_HEIGHT);
 
             this._randomizeStartPos();
 
-            // --- Images ---
-            // Received prepared Clutter.Images
+            // --- Image Resources ---
             this._frameImages = frameImages;
 
-            // --- Actor Setup ---
-            // Use St.Icon instead of Clutter.Actor (Clutter.Image might be missing)
+            // --- Actor Setup (St.Icon) ---
+            // NOTE: St.Icon handles scaling better when using only icon_size.
+            // We avoid explicit width/height to prevent conflicts with internal icon management.
             this.actor = new St.Icon({
                 visible: true,
                 reactive: false,
-                width: this._displayW,
-                height: this._displayH,
-                // content_gravity is not directly applicable to St.Icon, it handles scaling differently
-                // but setting width/height explicitly usually works.
+                icon_size: this._displayH,
+                style: 'padding: 0px;',
             });
 
-            // Set initial content
+            // Set initial frame content
             if (this._frameImages.length > 0 && this._frameImages[0]) {
                 this.actor.set_gicon(this._frameImages[0]);
             }
 
-            // --- Initial Placement ---
-            // Add to the Shell's generic UI layer (Chrome) initially.
+            // Add to the Shell's UI layer (Chrome) initially
             Main.layoutManager.addChrome(this.actor);
             this.actor.set_position(this._x, this._y);
 
@@ -95,7 +90,6 @@ const Gnomelet = GObject.registerClass(
         }
 
         // Property to define facing based on Velocity X
-        // Automatically updates saved facing when moving, otherwise returns last direction.
         get facingRight() {
             let sign = Math.sign(this._vx);
             if (sign !== 0 && !isNaN(sign)) {
@@ -104,6 +98,9 @@ const Gnomelet = GObject.registerClass(
             return this._savedFacing;
         }
 
+        /**
+         * Updates the gnomelet scale when settings change.
+         */
         updateScale() {
             let oldH = this._displayH;
 
@@ -113,16 +110,17 @@ const Gnomelet = GObject.registerClass(
             this._displayW = Math.floor(this._frameWidth * scaleFactor);
             this._displayH = Math.floor(TARGET_HEIGHT);
 
-            // Update Actors
-            // Container
-            this.actor.set_width(this._displayW);
-            this.actor.set_height(this._displayH);
+            // Update the visual size of the icon
+            this.actor.set_icon_size(this._displayH);
 
-            // Adjust Y position so feet stay at the same level
+            // Adjust Y position so feet stay at the same ground level
             this._y = this._y + oldH - this._displayH;
             this.actor.set_position(this._x, this._y);
         }
 
+        /**
+         * Serializes the state for persistence
+         */
         serialize() {
             return {
                 x: this._x,
@@ -135,6 +133,9 @@ const Gnomelet = GObject.registerClass(
             };
         }
 
+        /**
+         * Restores saved state
+         */
         deserialize(data) {
             if (!data) return;
             if (data.x !== undefined) this._x = data.x;
@@ -150,8 +151,6 @@ const Gnomelet = GObject.registerClass(
 
         /**
          * Main update loop for the gnomelet.
-         * Called by GnomeletManager every tick.
-         * @param {Array} windows - List of visible windows to interact with.
          */
         update(windows) {
             if (!this.actor) return; // Guard against updates after destruction
@@ -171,80 +170,63 @@ const Gnomelet = GObject.registerClass(
             this._x += this._vx;
             this._y += this._vy;
 
-            // Determine current monitor
+            // Determine current monitor based on "feet" position
             let feetX = this._x + this._displayW / 2;
             let feetY = this._y + this._displayH;
 
-            // Find monitors strictly containing X
+            // Find monitors containing the X coordinate
             let monitors = Main.layoutManager.monitors.filter(m => feetX >= m.x && feetX < m.x + m.width);
 
             let currentMonitor = null;
             if (monitors.length === 0) {
-                // Out of bounds? Use Primary
                 currentMonitor = Main.layoutManager.primaryMonitor;
             } else if (monitors.length === 1) {
                 currentMonitor = monitors[0];
             } else {
-                // Multiple stacked vertically. Find the one we are "in" or just fell through.
-                // We want the monitor where feetY is within [y, y + height]
-                // OR if feetY > y + height (just passed), but feetY < next_monitor.y?
-
-                // Let's sort by Y
+                // Handle vertically stacked monitors
                 monitors.sort((a, b) => a.y - b.y);
-
-                // Find first monitor where we are ABOVE the floor?
-                // No, we want the monitor that encloses us.
                 currentMonitor = monitors.find(m => feetY < m.y + m.height);
-
-                // If we are past the last monitor's floor (currentMonitor is undefined),
-                // it implies we fell off the world bottom.
-                // We should probably snap to the last one.
                 if (!currentMonitor) currentMonitor = monitors[monitors.length - 1];
             }
 
             let floorY = currentMonitor.y + currentMonitor.height;
 
-            // --- Logic: Reposition on Floor Exit ---
-            // If the gnomelet is on the "floor" and walks off-screen, respawn it at the top.
+            // --- Logic: Reposition if walking off floor ---
             let onFloorLevel = (this._y + this._displayH) >= floorY - 10;
 
             if (onFloorLevel) {
-                // Check if completely outside horizontal bounds
+                // If walking outside horizontal bounds of the stage, respawn at the top
                 if (this._x < -this._displayW || this._x > global.stage.width) {
                     this._respawn();
-                    return; // Skip rest of frame
+                    return;
                 }
             } else {
-                // Routine Wall Bounce on windows/air
+                // Routine Wall Bounce when in air or on windows
                 let maxX = global.stage.width - this._displayW;
                 if (this._x < 0) {
                     this._x = 0;
-                    this._vx *= -1; // Just flip velocity, facing updates automatically
+                    this._vx *= -1;
                 } else if (this._x > maxX) {
                     this._x = maxX;
                     this._vx *= -1;
                 }
             }
 
-
             // --- Collision Detection ---
             let onGround = false;
             let landedOnWindow = null;
 
             if (this._vy >= 0) { // Only collide if falling downwards
-                // Check against all windows
                 for (let win of windows) {
                     let rect = win.rect;
 
                     // Hitbox: Feet within window width AND close to top edge
-                    // We use prevY to check if we *crossed* the threshold to prevent tunneling at high speeds
                     let prevFeetY = prevY + this._displayH;
                     let inHorizontalRange = (feetX >= rect.x) && (feetX <= rect.x + rect.width);
                     let inVerticalRange = (feetY >= rect.y) && (prevFeetY <= rect.y + 25);
 
                     if (inHorizontalRange && inVerticalRange) {
-                        // Landed!
-                        this._y = rect.y - this._displayH + 1; // +1 to prevent floating
+                        this._y = rect.y - this._displayH + 1;
                         this._vy = 0;
                         onGround = true;
                         landedOnWindow = win;
@@ -263,61 +245,39 @@ const Gnomelet = GObject.registerClass(
             }
 
             // --- Z-Ordering / Layering Logic ---
-            // This is complex because we want gnomelets to stand ON windows (appear in front of them),
-            // but arguably BEHIND windows that are covering the one they stand on.
-
             if (landedOnWindow) {
-                // 1. Landing on a Window:
-                // Move the gnomelet actor into the global 'window_group'.
-                // This allows us to use 'set_child_above_sibling' to place it essentially
-                // on the same layer stack as the windows themselves.
-
+                // If on a window, it must be in the same group to be ordered relative to it
                 let parent = this.actor.get_parent();
                 if (parent !== global.window_group) {
-                    // Cleanly remove from previous container
                     if (parent === Main.layoutManager.uiGroup) {
                         Main.layoutManager.removeChrome(this.actor);
-                    } else if (parent === Main.layoutManager._backgroundGroup) {
-                        parent.remove_child(this.actor);
                     } else if (parent) {
                         parent.remove_child(this.actor);
                     }
                     global.window_group.add_child(this.actor);
                 }
-                // Ensure it is just above the window it landed on
+                // Place it right above the window it landed on
                 global.window_group.set_child_above_sibling(this.actor, landedOnWindow.actor);
 
             } else if (onGround && !landedOnWindow) {
-                // 2. Landing on the Floor:
-                // Behavior depends on user settings ('Front' or 'Back').
-
+                // If on the floor, follow user settings (Front/Overlay or Back/Desktop)
                 let floorMode = this._settings.get_string('floor-z-order');
                 let parent = this.actor.get_parent();
 
                 if (floorMode === 'front') {
-                    // 'Front': Default Overlay mode. 
-                    // Put in 'uiGroup' (Chrome), which is above everything.
                     if (parent !== Main.layoutManager.uiGroup) {
-                        if (parent) {
-                            parent.remove_child(this.actor);
-                        }
+                        if (parent) parent.remove_child(this.actor);
                         Main.layoutManager.addChrome(this.actor);
                     }
                 } else {
-                    // 'Back': Desktop mode.
-                    // We want it behind all windows but above the wallpaper.
-                    // We use '_backgroundGroup' (the container for desktop icons/background).
-                    // It's a private property in newer Shell versions, so we attempt access.
+                    // Desktop mode: behind windows but above wallpaper
                     let bgGroup = Main.layoutManager._backgroundGroup;
-
                     if (bgGroup && parent !== bgGroup) {
-                        // Remove from UI/Window group
                         if (parent === Main.layoutManager.uiGroup) {
                             Main.layoutManager.removeChrome(this.actor);
                         } else if (parent) {
                             parent.remove_child(this.actor);
                         }
-                        // Add to background
                         bgGroup.add_child(this.actor);
                     }
                 }
@@ -325,13 +285,11 @@ const Gnomelet = GObject.registerClass(
 
             // --- State Machine Transitions ---
             if (onGround) {
-                // Just landed?
                 if (this._state === State.FALLING || this._state === State.JUMPING) {
                     this._vy = 0;
-                    this._pickNewAction(); // Decide whether to walk or sit, and set the state accordingly
+                    this._pickNewAction();
                 }
             } else {
-                // In air
                 if (this._state !== State.JUMPING) {
                     this._state = State.FALLING;
                 }
@@ -339,16 +297,14 @@ const Gnomelet = GObject.registerClass(
 
             // --- AI Behavior ---
             if (this._state === State.WALKING) {
-                // Maintain current velocity (direction set by _pickNewAction)
                 this._idleTimer = 0;
-
-                // Small chance to stop walking
+                // Chance to stop walking
                 if (Math.random() < 0.02) {
                     this._state = State.IDLE;
                     this._vx = 0;
-                    this._idleTimer = Math.random() * 60 + 20; // 1-3 seconds
+                    this._idleTimer = Math.random() * 60 + 20;
                 }
-                // Very small chance to jump
+                // Small chance to jump
                 if (Math.random() < 0.01) {
                     this._performJump();
                 }
@@ -356,7 +312,7 @@ const Gnomelet = GObject.registerClass(
                 this._vx = 0;
                 this._idleTimer--;
                 if (this._idleTimer <= 0) {
-                    this._pickNewAction(); // Time to move again
+                    this._pickNewAction();
                 }
             }
 
@@ -364,6 +320,9 @@ const Gnomelet = GObject.registerClass(
             this.actor.set_position(Math.floor(this._x), Math.floor(this._y));
         }
 
+        /**
+         * Generates a random start position above one of the monitors.
+         */
         _randomizeStartPos() {
             let monitors = Main.layoutManager.monitors;
             if (!monitors || monitors.length === 0) {
@@ -376,14 +335,15 @@ const Gnomelet = GObject.registerClass(
             }
         }
 
+        /**
+         * Resets the character to the top.
+         */
         _respawn() {
-            // Reset to top to fall again
             this._randomizeStartPos();
             this._vx = 0;
             this._vy = 0;
             this._state = State.FALLING;
 
-            // Ensure visibility by moving back to Chrome layer
             let parent = this.actor.get_parent();
             if (parent !== Main.layoutManager.uiGroup) {
                 if (parent) parent.remove_child(this.actor);
@@ -391,11 +351,13 @@ const Gnomelet = GObject.registerClass(
             }
         }
 
+        /**
+         * Decides the next action when on the ground.
+         */
         _pickNewAction() {
             let r = Math.random();
             if (r < 0.6) {
                 this._state = State.WALKING;
-                // Set velocity directly based on random choice
                 let dir = (Math.random() > 0.5) ? 1 : -1;
                 this._vx = dir * WALK_SPEED;
             } else {
@@ -404,22 +366,26 @@ const Gnomelet = GObject.registerClass(
             }
         }
 
+        /**
+         * Performs a jump.
+         */
         _performJump() {
             this._state = State.JUMPING;
             this._vy = JUMP_VELOCITY;
-            // Keep current facing direction
             let dir = this.facingRight ? 1 : -1;
             this._vx = dir * WALK_SPEED * 2;
         }
 
+        /**
+         * Calculates the correct frame based on state and time.
+         */
         _updateAnimation() {
             this._animationTimer++;
             let frameIndex = 0;
-            // Map states to sprite frames
             switch (this._state) {
                 case State.WALKING:
                     let walkFrames = [0, 1, 2, 3];
-                    let speed = 4; // Change frame every 4 ticks
+                    let speed = 4; // Frame changes every 4 ticks
                     let idx = Math.floor(this._animationTimer / speed) % walkFrames.length;
                     frameIndex = walkFrames[idx];
                     break;
@@ -434,19 +400,20 @@ const Gnomelet = GObject.registerClass(
             this.setFrame(frameIndex);
         }
 
+        /**
+         * Applies the frame and handles horizontal flipping (mirroring).
+         */
         setFrame(frameIndex) {
             if (this._frame === frameIndex && this._lastFacing === this.facingRight) return;
 
             this._frame = frameIndex;
             this._lastFacing = this.facingRight;
 
-            // Swap the content to the pre-loaded GIcon for this frame
             if (this._frameImages && this._frameImages[frameIndex]) {
-                // Use St.Icon's method to set the GIcon
                 this.actor.set_gicon(this._frameImages[frameIndex]);
             }
 
-            // Facing via Actor scaling (mirroring)
+            // Horizontal mirroring
             this.actor.set_pivot_point(0.5, 0.5);
             if (this.facingRight) {
                 this.actor.scale_x = 1;
@@ -455,9 +422,11 @@ const Gnomelet = GObject.registerClass(
             }
         }
 
+        /**
+         * Removes the actor and cleans up references.
+         */
         destroy() {
             if (this.actor) {
-                // Clean up from whichever parent it is currently in
                 let parent = this.actor.get_parent();
                 if (parent === Main.layoutManager.uiGroup) {
                     Main.layoutManager.removeChrome(this.actor);
@@ -467,14 +436,13 @@ const Gnomelet = GObject.registerClass(
                 this.actor.destroy();
                 this.actor = null;
             }
-            // Just clear default (references to shared images)
             this._frameImages = [];
         }
     });
 
 /**
  * GnomeletManager Class
- * Orchestrates the lifecycle of all gnomelets.
+ * Orchestrates the lifecycle of all characters and global resources.
  */
 class GnomeletManager {
     constructor(settings) {
@@ -487,20 +455,15 @@ class GnomeletManager {
         this._resources = {};
         this._cacheFile = GLib.get_user_cache_dir() + '/gnomelets-state.json';
 
-        // Initial load
         this._loadCurrentResources();
     }
 
+    /**
+     * Loads PNG images for the selected character type.
+     */
     _loadCurrentResources() {
-        let type = this._settings.get_string('gnomelet-type');
-        if (!type) type = 'kitten';
-
-        if (this._resources[type]) {
-            // Already loaded
-            return;
-        }
-
-        console.log(`[Gnomelets] Loading resources for ${type}...`);
+        let type = this._settings.get_string('gnomelet-type') || 'kitten';
+        if (this._resources[type]) return;
 
         let frames = [];
         let frameW = 0;
@@ -508,126 +471,99 @@ class GnomeletManager {
         let anySuccess = false;
 
         let file = Gio.File.new_for_uri(import.meta.url);
-        let dir = file.get_parent(); // Main extension dir
-
-        // Images are now in images/<type>/0.png ... 5.png
+        let dir = file.get_parent();
         let typeDir = dir.get_child('images').get_child(type);
 
         for (let i = 0; i < 6; i++) {
             let imgFile = typeDir.get_child(`${i}.png`);
             if (!imgFile.query_exists(null)) {
-                console.error(`[Gnomelets] Missing frame ${i} for ${type}`);
                 frames.push(null);
                 continue;
             }
 
             try {
-                // 1. Get dimensions using GdkPixbuf (still useful for logic)
-                // If GdkPixbuf is unavailable this will throw, which is fine to catch.
+                // Read real dimensions from PNGs for physics calculation
                 let pixbuf = GdkPixbuf.Pixbuf.new_from_file(imgFile.get_path());
-
                 if (frameW === 0) {
                     frameW = pixbuf.get_width();
                     frameH = pixbuf.get_height();
                 }
-
-                // 2. Create Gio.FileIcon for St.Icon
                 let icon = new Gio.FileIcon({ file: imgFile });
-
                 frames.push(icon);
                 anySuccess = true;
-
             } catch (e) {
-                console.error(`[Gnomelets] Failed to load frame ${i} for ${type}: ${e.message}`);
                 frames.push(null);
             }
         }
 
         if (anySuccess && frameW > 0 && frameH > 0) {
-            this._resources[type] = {
-                frames: frames,
-                w: frameW,
-                h: frameH
-            };
-        } else {
-            console.error(`[Gnomelets] Failed to load resources for ${type}. Functionality disabled.`);
-            // Ensure we don't store broken state
-            delete this._resources[type];
+            this._resources[type] = { frames, w: frameW, h: frameH };
         }
     }
 
+    /**
+     * Enables manager, listeners, and the main timer.
+     */
     enable() {
-        // Listen for changes
         this._settingsSignal = this._settings.connect('changed', (settings, key) => {
-            if (key === 'gnomelet-count') {
-                this._updateCount();
-            } else if (key === 'gnomelet-scale') {
-                this._updateScale();
-            } else if (key === 'gnomelet-type') {
-                this._loadCurrentResources(); // Ensure new type is loaded
+            if (key === 'gnomelet-count') this._updateCount();
+            else if (key === 'gnomelet-scale') this._updateScale();
+            else if (key === 'gnomelet-type') {
+                this._loadCurrentResources();
                 this._hardReset();
-            } else if (key === 'reset-trigger') {
-                this._hardReset();
-            }
+            } else if (key === 'reset-trigger') this._hardReset();
         });
 
-        // Load saved state if available
         let savedState = this._loadState();
         this._spawnGnomelets(savedState);
 
-        // Start the Main Loop
         this._timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, UPDATE_INTERVAL_MS, () => {
             this._tick();
             return GLib.SOURCE_CONTINUE;
         });
     }
 
+    /**
+     * Disables everything and saves current state.
+     */
     disable() {
-        // Save current state before destroying
         this._saveState();
-
         if (this._timerId) {
             GLib.source_remove(this._timerId);
             this._timerId = 0;
         }
-
         if (this._settingsSignal) {
             this._settings.disconnect(this._settingsSignal);
             this._settingsSignal = 0;
         }
-
         this._destroyGnomelets();
-
-        // We could clear cache, but maybe better to keep it if re-enabled?
-        // Let's clear it to free memory
         this._resources = {};
     }
 
+    /**
+     * Loads saved state from JSON cache file.
+     */
     _loadState() {
         try {
             if (GLib.file_test(this._cacheFile, GLib.FileTest.EXISTS)) {
                 let [success, contents] = GLib.file_get_contents(this._cacheFile);
                 if (success) {
                     let decoder = new TextDecoder('utf-8');
-                    let json = decoder.decode(contents);
-                    let data = JSON.parse(json);
-                    return data;
+                    return JSON.parse(decoder.decode(contents));
                 }
             }
-        } catch (e) {
-            console.warn(`[Gnomelets] Failed to load state: ${e.message}`);
-        }
-        return null; // No saved state
+        } catch (e) { }
+        return null;
     }
 
+    /**
+     * Saves the state of all characters to file.
+     */
     _saveState() {
         try {
             let data = this._gnomelets.map(p => p.serialize());
-            let json = JSON.stringify(data);
-            GLib.file_set_contents(this._cacheFile, json);
-        } catch (e) {
-            console.warn(`[Gnomelets] Failed to save state: ${e.message}`);
-        }
+            GLib.file_set_contents(this._cacheFile, JSON.stringify(data));
+        } catch (e) { }
     }
 
     _updateScale() {
@@ -638,36 +574,28 @@ class GnomeletManager {
 
     _hardReset() {
         this._destroyGnomelets();
-
-        // Delete cache file to prevent restoring old state
         try {
             let f = Gio.File.new_for_path(this._cacheFile);
-            if (f.query_exists(null)) {
-                f.delete(null);
-            }
-        } catch (e) {
-            console.warn(`[Gnomelets] Failed to delete cache: ${e.message}`);
-        }
-
+            if (f.query_exists(null)) f.delete(null);
+        } catch (e) { }
         this._spawnGnomelets(null);
     }
 
+    /**
+     * Adds or removes characters based on settings count.
+     */
     _updateCount() {
         let count = this._settings.get_int('gnomelet-count');
         let current = this._gnomelets.length;
-
         let type = this._settings.get_string('gnomelet-type') || 'kitten';
         let res = this._resources[type];
-        if (!res) return; // Should not happen if loaded
+        if (!res) return;
 
         if (count > current) {
-            // Add new gnomelets
             for (let i = 0; i < (count - current); i++) {
-                let p = new Gnomelet(res.frames, res.w, res.h, this._settings);
-                this._gnomelets.push(p);
+                this._gnomelets.push(new Gnomelet(res.frames, res.w, res.h, this._settings));
             }
         } else if (count < current) {
-            // Remove gnomelets
             for (let i = 0; i < (current - count); i++) {
                 let p = this._gnomelets.pop();
                 p.destroy();
@@ -676,68 +604,44 @@ class GnomeletManager {
     }
 
     _spawnGnomelets(savedState) {
-        // Spawn gnomelets based on user setting
         let count = this._settings.get_int('gnomelet-count');
         let type = this._settings.get_string('gnomelet-type') || 'kitten';
         let res = this._resources[type];
-
-        if (!res) {
-            console.error(`[Gnomelets] No resources for ${type}, cannot spawn.`);
-            return;
-        }
+        if (!res) return;
 
         for (let i = 0; i < count; i++) {
             let p = new Gnomelet(res.frames, res.w, res.h, this._settings);
-            if (savedState && savedState[i]) {
-                p.deserialize(savedState[i]);
-            }
+            if (savedState && savedState[i]) p.deserialize(savedState[i]);
             this._gnomelets.push(p);
         }
     }
 
     _destroyGnomelets() {
-        for (let p of this._gnomelets) {
-            p.destroy();
-        }
+        for (let p of this._gnomelets) p.destroy();
         this._gnomelets = [];
     }
 
+    /**
+     * Tick function executed every loop to gather windows and update character states.
+     */
     _tick() {
-        // Wrap tick in try-catch to prevent extension crash from transient errors
         try {
             this._windows = [];
             let focusWindow = global.display.focus_window;
             let maximizedFocused = focusWindow && isWindowMaximized(focusWindow);
 
+            // If the focused window is maximized, we don't gather windows to let characters fall to the bottom
             if (!maximizedFocused) {
-                // Gather all visible windows from the shell
-                // We use global.window_group to get the actual Actor hierarchy
                 let actors = global.window_group.get_children();
                 for (let actor of actors) {
-                    if (!actor.visible) continue;
-
-                    // Only care about actors that have a MetaWindow (real application windows)
-                    if (actor.meta_window) {
-                        let rect = actor.meta_window.get_frame_rect();
-                        if (actor.meta_window.minimized) continue;
-                        // Skip maximized windows to prevent gnomelets from being hidden/off-screen
-                        if (isWindowMaximized(actor.meta_window)) continue;
-
-                        this._windows.push({
-                            rect: rect,
-                            actor: actor
-                        });
-                    }
+                    if (!actor.visible || !actor.meta_window) continue;
+                    let rect = actor.meta_window.get_frame_rect();
+                    if (actor.meta_window.minimized || isWindowMaximized(actor.meta_window)) continue;
+                    this._windows.push({ rect, actor });
                 }
             }
-
-            // Update individual gnomelets
-            for (let p of this._gnomelets) {
-                p.update(this._windows);
-            }
-        } catch (e) {
-            console.error(`[Gnomelets] Error: ${e.message}`);
-        }
+            for (let p of this._gnomelets) p.update(this._windows);
+        } catch (e) { }
     }
 }
 

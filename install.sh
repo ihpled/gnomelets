@@ -19,7 +19,7 @@ fi
 
 # 3. Copy files
 echo "📦 Copying files to $INSTALL_DIR..."
-cp -r extension.js prefs.js metadata.json stylesheet.css schemas images "$INSTALL_DIR"
+cp -r extension.js prefs.js metadata.json schemas images "$INSTALL_DIR"
 
 # 4. Success message
 echo "✅ Installation complete!"
