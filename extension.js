@@ -40,8 +40,8 @@ const Gnomelet = GObject.registerClass(
             // --- Initialization ---
             // Start falling from the top of the screen at a random X position
             this._state = State.FALLING;
-            this._x = Math.floor(Math.random() * (global.stage.width - 100)); // Ensure it starts within bounds
-            this._y = 0;
+            // Start falling from the top of the screen at a random X position
+            this._state = State.FALLING;
             this._vx = 0; // Velocity X
             this._vy = 0; // Velocity Y
 
@@ -66,6 +66,8 @@ const Gnomelet = GObject.registerClass(
 
             this._displayW = Math.floor(this._frameWidth * scaleFactor);
             this._displayH = Math.floor(TARGET_HEIGHT);
+
+            this._randomizeStartPos();
 
             // --- Actor Hierarchy (Rendering) ---
             // We use a "Hardware Scissor" technique for rendering sprites.
@@ -400,10 +402,21 @@ const Gnomelet = GObject.registerClass(
             this.actor.set_position(Math.floor(this._x), Math.floor(this._y));
         }
 
+        _randomizeStartPos() {
+            let monitors = Main.layoutManager.monitors;
+            if (!monitors || monitors.length === 0) {
+                this._x = Math.floor(Math.random() * (global.stage.width - this._displayW));
+                this._y = 0;
+            } else {
+                let m = monitors[Math.floor(Math.random() * monitors.length)];
+                this._x = Math.floor(m.x + Math.random() * (m.width - this._displayW));
+                this._y = m.y;
+            }
+        }
+
         _respawn() {
             // Reset to top to fall again
-            this._y = 0;
-            this._x = Math.floor(Math.random() * (global.stage.width - this._displayW));
+            this._randomizeStartPos();
             this._vx = 0;
             this._vy = 0;
             this._state = State.FALLING;
