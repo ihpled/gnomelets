@@ -207,9 +207,42 @@ const Gnomelet = GObject.registerClass(
             this._x += this._vx;
             this._y += this._vy;
 
+            // Determine current monitor
+            let feetX = this._x + this._displayW / 2;
+            let feetY = this._y + this._displayH;
+
+            // Find monitors strictly containing X
+            let monitors = Main.layoutManager.monitors.filter(m => feetX >= m.x && feetX < m.x + m.width);
+
+            let currentMonitor = null;
+            if (monitors.length === 0) {
+                // Out of bounds? Use Primary
+                currentMonitor = Main.layoutManager.primaryMonitor;
+            } else if (monitors.length === 1) {
+                currentMonitor = monitors[0];
+            } else {
+                // Multiple stacked vertically. Find the one we are "in" or just fell through.
+                // We want the monitor where feetY is within [y, y + height]
+                // OR if feetY > y + height (just passed), but feetY < next_monitor.y?
+
+                // Let's sort by Y
+                monitors.sort((a, b) => a.y - b.y);
+
+                // Find first monitor where we are ABOVE the floor?
+                // No, we want the monitor that encloses us.
+                currentMonitor = monitors.find(m => feetY < m.y + m.height);
+
+                // If we are past the last monitor's floor (currentMonitor is undefined),
+                // it implies we fell off the world bottom.
+                // We should probably snap to the last one.
+                if (!currentMonitor) currentMonitor = monitors[monitors.length - 1];
+            }
+
+            let floorY = currentMonitor.y + currentMonitor.height;
+
             // --- Logic: Reposition on Floor Exit ---
             // If the gnomelet is on the "floor" and walks off-screen, respawn it at the top.
-            let onFloorLevel = (this._y + this._displayH) >= global.stage.height - 10;
+            let onFloorLevel = (this._y + this._displayH) >= floorY - 10;
 
             if (onFloorLevel) {
                 // Check if completely outside horizontal bounds
@@ -235,9 +268,6 @@ const Gnomelet = GObject.registerClass(
             let landedOnWindow = null;
 
             if (this._vy >= 0) { // Only collide if falling downwards
-                let feetX = this._x + this._displayW / 2;
-                let feetY = this._y + this._displayH;
-
                 // Check against all windows
                 for (let win of windows) {
                     let rect = win.rect;
@@ -260,8 +290,8 @@ const Gnomelet = GObject.registerClass(
 
                 // Allow landing on screen bottom (Floor)
                 if (!landedOnWindow) {
-                    if (feetY >= global.stage.height) {
-                        this._y = global.stage.height - this._displayH;
+                    if (feetY >= floorY) {
+                        this._y = floorY - this._displayH;
                         this._vy = 0;
                         onGround = true;
                     }

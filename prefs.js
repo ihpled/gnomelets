@@ -36,7 +36,7 @@ export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
         const countSpin = new Gtk.SpinButton({
             adjustment: new Gtk.Adjustment({
                 lower: 1,
-                upper: 10,
+                upper: 20,
                 step_increment: 1,
             }),
             valign: Gtk.Align.CENTER,
