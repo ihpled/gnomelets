@@ -193,8 +193,7 @@ const Gnomelet = GObject.registerClass(
         update(windows) {
             if (!this.actor) return; // Guard against updates after destruction
 
-            // --- Physics Engine ---
-            // Apply Gravity
+            // Physics (Gravity)
             if (this._state === State.FALLING || this._state === State.JUMPING) {
                 this._vy += GRAVITY;
             }
@@ -665,8 +664,7 @@ class GnomeletManager {
         console.log(`[Gnomelets] Spawning ${count} gnomelets.`);
 
         for (let i = 0; i < count; i++) {
-            let p = new Gnomelet(this._imagePath, this._imgW, this._imgH, this._settings);
-            // Restore state if available for this index
+            let p = new Gnomelet(this._pixbuf, this._imgW, this._imgH, this._settings);
             if (savedState && savedState[i]) {
                 p.deserialize(savedState[i]);
             }
