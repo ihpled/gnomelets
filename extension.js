@@ -32,12 +32,11 @@ function isWindowMaximized(window) {
 /**
  * Gnomelet Class
  * Represents a single animated kitten on the screen.
- * REFACTOR: Uses Pre-sliced Clutter.Images instead of Canvas or CSS.
- * This avoids VM/Wayland clipping bugs AND avoids Clutter.Canvas constructor issues.
+ * REFACTOR: Uses Pre-sliced Clutter.Images loaded by Manager.
  */
 const Gnomelet = GObject.registerClass(
     class Gnomelet extends GObject.Object {
-        _init(pixbuf, sheetWidth, sheetHeight, settings) {
+        _init(frameImages, frameWidth, frameHeight, settings) {
             super._init();
 
             this._settings = settings;
@@ -55,12 +54,9 @@ const Gnomelet = GObject.registerClass(
             this._idleTimer = 0; // Countdown for how long to sit idle
 
             // --- Configurable Dimensions ---
-            // We calculate the optimal display size based on the source image size
-            // ensuring high quality and correct aspect ratio for a ~64px height.
-            this._sheetWidth = sheetWidth;
-            this._sheetHeight = sheetHeight;
-            this._frameWidth = sheetWidth / 6; // Assuming 6 frames horizontally
-            this._frameHeight = sheetHeight;
+            // We use the passed frame width/height directly
+            this._frameWidth = frameWidth;
+            this._frameHeight = frameHeight;
 
             const TARGET_HEIGHT = this._settings.get_int('gnomelet-scale');
             const scaleFactor = TARGET_HEIGHT / this._frameHeight;
@@ -70,62 +66,24 @@ const Gnomelet = GObject.registerClass(
 
             this._randomizeStartPos();
 
-            // --- Texture Preparation (Slice the Atlas) ---
-            // We create 6 Clutter.Images, one for each frame.
-            this._frameImages = [];
-
-            try {
-                const hasAlpha = pixbuf.get_has_alpha();
-                const pixelFormat = hasAlpha ? Cogl.PixelFormat.RGBA_8888 : Cogl.PixelFormat.RGB_888;
-                const nChannels = hasAlpha ? 4 : 3;
-                const rowStride = pixbuf.get_rowstride();
-
-                for (let i = 0; i < 6; i++) {
-                    // Create a sub-buffer for this frame (no copy, just reference)
-                    let srcX = i * this._frameWidth;
-                    let subPixbuf = pixbuf.new_subpixbuf(srcX, 0, this._frameWidth, this._frameHeight);
-
-                    // Create a Clutter.Image content
-                    let img = new Clutter.Image();
-
-                    // Upload pixel data to GPU
-                    // Note: new_subpixbuf shares data, but get_pixels() returns the pointer.
-                    // However, we need to point to the start of the subpixbuf.
-                    // Actually, subpixbuf.get_pixels() returns the correct offset pointer in C,
-                    // and GJS maps it to a Uint8Array. 
-                    // Clutter.Image.set_data handles the copy.
-
-                    let success = img.set_data(
-                        subPixbuf.get_pixels(),
-                        pixelFormat,
-                        this._frameWidth,
-                        this._frameHeight,
-                        subPixbuf.get_rowstride()
-                    );
-
-                    if (success) {
-                        this._frameImages.push(img);
-                    } else {
-                        console.error(`[Gnomelets] Failed to create texture for frame ${i}`);
-                        this._frameImages.push(null); // Placeholder
-                    }
-                }
-            } catch (e) {
-                console.error(`[Gnomelets] Error preparing textures: ${e.message}`);
-            }
+            // --- Images ---
+            // Received prepared Clutter.Images
+            this._frameImages = frameImages;
 
             // --- Actor Setup ---
-            this.actor = new Clutter.Actor({
+            // Use St.Icon instead of Clutter.Actor (Clutter.Image might be missing)
+            this.actor = new St.Icon({
                 visible: true,
                 reactive: false,
                 width: this._displayW,
                 height: this._displayH,
-                content_gravity: Clutter.ContentGravity.RESIZE_ASPECT,
+                // content_gravity is not directly applicable to St.Icon, it handles scaling differently
+                // but setting width/height explicitly usually works.
             });
 
             // Set initial content
             if (this._frameImages.length > 0 && this._frameImages[0]) {
-                this.actor.set_content(this._frameImages[0]);
+                this.actor.set_gicon(this._frameImages[0]);
             }
 
             // --- Initial Placement ---
@@ -482,9 +440,10 @@ const Gnomelet = GObject.registerClass(
             this._frame = frameIndex;
             this._lastFacing = this.facingRight;
 
-            // Swap the content to the pre-loaded Clutter.Image for this frame
+            // Swap the content to the pre-loaded GIcon for this frame
             if (this._frameImages && this._frameImages[frameIndex]) {
-                this.actor.set_content(this._frameImages[frameIndex]);
+                // Use St.Icon's method to set the GIcon
+                this.actor.set_gicon(this._frameImages[frameIndex]);
             }
 
             // Facing via Actor scaling (mirroring)
@@ -508,6 +467,7 @@ const Gnomelet = GObject.registerClass(
                 this.actor.destroy();
                 this.actor = null;
             }
+            // Just clear default (references to shared images)
             this._frameImages = [];
         }
     });
@@ -522,41 +482,81 @@ class GnomeletManager {
         this._settings = settings;
         this._windows = [];
         this._timerId = 0;
-        this._imagePath = null;
-        this._pixbuf = null; // Store loaded pixbuf
-        this._imgW = 0;
-        this._imgH = 0;
+
+        // Resource cache: { [type: string]: { frames: GIcon[], w: int, h: int } }
+        this._resources = {};
         this._cacheFile = GLib.get_user_cache_dir() + '/gnomelets-state.json';
 
-        this._updateImageSource();
+        // Initial load
+        this._loadCurrentResources();
     }
 
-    _updateImageSource() {
+    _loadCurrentResources() {
         let type = this._settings.get_string('gnomelet-type');
         if (!type) type = 'kitten';
 
-        let file = Gio.File.new_for_uri(import.meta.url);
-        let dir = file.get_parent();
-        let imageFile = dir.get_child('images').get_child(`${type}.png`);
-        this._imagePath = imageFile.get_path();
+        if (this._resources[type]) {
+            // Already loaded
+            return;
+        }
 
-        try {
-            // Keep the Pixbuf in memory to pass to Gnomelets for drawing
-            this._pixbuf = GdkPixbuf.Pixbuf.new_from_file(this._imagePath);
-            this._imgW = this._pixbuf.get_width();
-            this._imgH = this._pixbuf.get_height();
-            console.log(`[Gnomelets] Loaded image for ${type}: ${this._imgW}x${this._imgH}`);
-        } catch (e) {
-            console.error(`[Gnomelets] Failed to load image info for ${type}: ${e.message}`);
-            this._pixbuf = null;
-            this._imgW = 0;
-            this._imgH = 0;
+        console.log(`[Gnomelets] Loading resources for ${type}...`);
+
+        let frames = [];
+        let frameW = 0;
+        let frameH = 0;
+        let anySuccess = false;
+
+        let file = Gio.File.new_for_uri(import.meta.url);
+        let dir = file.get_parent(); // Main extension dir
+
+        // Images are now in images/<type>/0.png ... 5.png
+        let typeDir = dir.get_child('images').get_child(type);
+
+        for (let i = 0; i < 6; i++) {
+            let imgFile = typeDir.get_child(`${i}.png`);
+            if (!imgFile.query_exists(null)) {
+                console.error(`[Gnomelets] Missing frame ${i} for ${type}`);
+                frames.push(null);
+                continue;
+            }
+
+            try {
+                // 1. Get dimensions using GdkPixbuf (still useful for logic)
+                // If GdkPixbuf is unavailable this will throw, which is fine to catch.
+                let pixbuf = GdkPixbuf.Pixbuf.new_from_file(imgFile.get_path());
+
+                if (frameW === 0) {
+                    frameW = pixbuf.get_width();
+                    frameH = pixbuf.get_height();
+                }
+
+                // 2. Create Gio.FileIcon for St.Icon
+                let icon = new Gio.FileIcon({ file: imgFile });
+
+                frames.push(icon);
+                anySuccess = true;
+
+            } catch (e) {
+                console.error(`[Gnomelets] Failed to load frame ${i} for ${type}: ${e.message}`);
+                frames.push(null);
+            }
+        }
+
+        if (anySuccess && frameW > 0 && frameH > 0) {
+            this._resources[type] = {
+                frames: frames,
+                w: frameW,
+                h: frameH
+            };
+        } else {
+            console.error(`[Gnomelets] Failed to load resources for ${type}. Functionality disabled.`);
+            // Ensure we don't store broken state
+            delete this._resources[type];
         }
     }
 
     enable() {
-        if (!this._pixbuf) return;
-
         // Listen for changes
         this._settingsSignal = this._settings.connect('changed', (settings, key) => {
             if (key === 'gnomelet-count') {
@@ -564,7 +564,7 @@ class GnomeletManager {
             } else if (key === 'gnomelet-scale') {
                 this._updateScale();
             } else if (key === 'gnomelet-type') {
-                this._updateImageSource();
+                this._loadCurrentResources(); // Ensure new type is loaded
                 this._hardReset();
             } else if (key === 'reset-trigger') {
                 this._hardReset();
@@ -597,7 +597,10 @@ class GnomeletManager {
         }
 
         this._destroyGnomelets();
-        this._pixbuf = null; // Free memory
+
+        // We could clear cache, but maybe better to keep it if re-enabled?
+        // Let's clear it to free memory
+        this._resources = {};
     }
 
     _loadState() {
@@ -653,10 +656,14 @@ class GnomeletManager {
         let count = this._settings.get_int('gnomelet-count');
         let current = this._gnomelets.length;
 
+        let type = this._settings.get_string('gnomelet-type') || 'kitten';
+        let res = this._resources[type];
+        if (!res) return; // Should not happen if loaded
+
         if (count > current) {
             // Add new gnomelets
             for (let i = 0; i < (count - current); i++) {
-                let p = new Gnomelet(this._pixbuf, this._imgW, this._imgH, this._settings);
+                let p = new Gnomelet(res.frames, res.w, res.h, this._settings);
                 this._gnomelets.push(p);
             }
         } else if (count < current) {
@@ -671,8 +678,16 @@ class GnomeletManager {
     _spawnGnomelets(savedState) {
         // Spawn gnomelets based on user setting
         let count = this._settings.get_int('gnomelet-count');
+        let type = this._settings.get_string('gnomelet-type') || 'kitten';
+        let res = this._resources[type];
+
+        if (!res) {
+            console.error(`[Gnomelets] No resources for ${type}, cannot spawn.`);
+            return;
+        }
+
         for (let i = 0; i < count; i++) {
-            let p = new Gnomelet(this._pixbuf, this._imgW, this._imgH, this._settings);
+            let p = new Gnomelet(res.frames, res.w, res.h, this._settings);
             if (savedState && savedState[i]) {
                 p.deserialize(savedState[i]);
             }
