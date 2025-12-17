@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="gnomelets">
+  <schema id="org.gnome.shell.extensions.gnomelets" path="/org/gnome/shell/extensions/gnomelets/">
+    <key name="floor-z-order" type="s">
+      <choices>
+        <choice value="front"/>
+        <choice value="back"/>
+      </choices>
+      <default>'front'</default>
+      <summary>Floor Z-Order</summary>
+      <description>Whether gnomelets on the floor appear in front of or behind all windows.</description>
+    </key>
+    <key name="gnomelet-type" type="s">
+      <choices>
+        <choice value="kitten"/>
+        <choice value="puppy"/>
+        <choice value="mouse"/>
+        <choice value="squirrel"/>
+        <choice value="santa"/>
+      </choices>
+      <default>'kitten'</default>
+      <summary>Gnomelet Character</summary>
+      <description>The kind of gnomelet to display.</description>
+    </key>
+    <key name="gnomelet-count" type="i">
+      <default>3</default>
+      <summary>Number of Gnomelets</summary>
+      <description>The number of gnomelets to spawn.</description>
+    </key>
+    <key name="gnomelet-scale" type="i">
+      <default>64</default>
+      <summary>Gnomelet Scale</summary>
+      <description>The target height of the gnomelet in pixels.</description>
+    </key>
+    <key name="reset-trigger" type="b">
+      <default>false</default>
+      <summary>Reset Trigger</summary>
+      <description>Toggle this to respawn all gnomelets.</description>
+    </key>
+  </schema>
+</schemalist>

@@ -16,7 +16,7 @@ const GRAVITY = 2;             // Vertical acceleration per frame
 const WALK_SPEED = 3;          // Horizontal pixels per frame
 const JUMP_VELOCITY = -20;     // Initial jump force (negative is up)
 
-// State Machine Definitions for the Pet
+// State Machine Definitions for the Gnomelet
 const State = {
     FALLING: 'FALLING',
     WALKING: 'WALKING',
@@ -25,17 +25,17 @@ const State = {
 };
 
 /**
- * Pet Class
+ * Gnomelet Class
  * Represents a single animated kitten on the screen.
  * Handles rendering, physics, AI, and window interactions.
  */
-const Pet = GObject.registerClass(
-    class Pet extends GObject.Object {
+const Gnomelet = GObject.registerClass(
+    class Gnomelet extends GObject.Object {
         _init(imagePath, sheetWidth, sheetHeight, settings) {
             super._init();
 
             this._settings = settings;
-            console.log(`[Desktop Pets] Pet init: sheet=${sheetWidth}x${sheetHeight}`);
+            console.log(`[Gnomelets] Gnomelet init: sheet=${sheetWidth}x${sheetHeight}`);
 
             // --- Initialization ---
             // Start falling from the top of the screen at a random X position
@@ -61,7 +61,7 @@ const Pet = GObject.registerClass(
             this._frameWidth = sheetWidth / 6; // Assuming 6 frames horizontally
             this._frameHeight = sheetHeight;
 
-            const TARGET_HEIGHT = this._settings.get_int('pet-scale');
+            const TARGET_HEIGHT = this._settings.get_int('gnomelet-scale');
             const scaleFactor = TARGET_HEIGHT / this._frameHeight;
 
             this._displayW = Math.floor(this._frameWidth * scaleFactor);
@@ -123,7 +123,7 @@ const Pet = GObject.registerClass(
         updateScale() {
             let oldH = this._displayH;
 
-            const TARGET_HEIGHT = this._settings.get_int('pet-scale');
+            const TARGET_HEIGHT = this._settings.get_int('gnomelet-scale');
             const scaleFactor = TARGET_HEIGHT / this._frameHeight;
 
             this._displayW = Math.floor(this._frameWidth * scaleFactor);
@@ -184,8 +184,8 @@ const Pet = GObject.registerClass(
         }
 
         /**
-         * Main update loop for the pet.
-         * Called by PetManager every tick.
+         * Main update loop for the gnomelet.
+         * Called by GnomeletManager every tick.
          * @param {Array} windows - List of visible windows to interact with.
          */
         update(windows) {
@@ -208,7 +208,7 @@ const Pet = GObject.registerClass(
             this._y += this._vy;
 
             // --- Logic: Reposition on Floor Exit ---
-            // If the pet is on the "floor" and walks off-screen, respawn it at the top.
+            // If the gnomelet is on the "floor" and walks off-screen, respawn it at the top.
             let onFloorLevel = (this._y + this._displayH) >= global.stage.height - 10;
 
             if (onFloorLevel) {
@@ -269,12 +269,12 @@ const Pet = GObject.registerClass(
             }
 
             // --- Z-Ordering / Layering Logic ---
-            // This is complex because we want pets to stand ON windows (appear in front of them),
+            // This is complex because we want gnomelets to stand ON windows (appear in front of them),
             // but arguably BEHIND windows that are covering the one they stand on.
 
             if (landedOnWindow) {
                 // 1. Landing on a Window:
-                // Move the pet actor into the global 'window_group'.
+                // Move the gnomelet actor into the global 'window_group'.
                 // This allows us to use 'set_child_above_sibling' to place it essentially
                 // on the same layer stack as the windows themselves.
 
@@ -459,25 +459,25 @@ const Pet = GObject.registerClass(
     });
 
 /**
- * PetManager Class
- * Orchestrates the lifecycle of all pets.
+ * GnomeletManager Class
+ * Orchestrates the lifecycle of all gnomelets.
  */
-class PetManager {
+class GnomeletManager {
     constructor(settings) {
-        this._pets = [];
+        this._gnomelets = [];
         this._settings = settings;
         this._windows = [];
         this._timerId = 0;
         this._imagePath = null;
         this._imgW = 0;
         this._imgH = 0;
-        this._cacheFile = GLib.get_user_cache_dir() + '/desktop-pets-state.json';
+        this._cacheFile = GLib.get_user_cache_dir() + '/gnomelets-state.json';
 
         this._updateImageSource();
     }
 
     _updateImageSource() {
-        let type = this._settings.get_string('pet-type');
+        let type = this._settings.get_string('gnomelet-type');
         if (!type) type = 'kitten';
 
         let file = Gio.File.new_for_uri(import.meta.url);
@@ -490,9 +490,9 @@ class PetManager {
             let pb = GdkPixbuf.Pixbuf.new_from_file(this._imagePath);
             this._imgW = pb.get_width();
             this._imgH = pb.get_height();
-            console.log(`[Desktop Pets] Loaded image for ${type}: ${this._imgW}x${this._imgH}`);
+            console.log(`[Gnomelets] Loaded image for ${type}: ${this._imgW}x${this._imgH}`);
         } catch (e) {
-            console.error(`[Desktop Pets] Failed to load image info for ${type}: ${e.message}`);
+            console.error(`[Gnomelets] Failed to load image info for ${type}: ${e.message}`);
             this._imgW = 0;
             this._imgH = 0;
         }
@@ -503,11 +503,11 @@ class PetManager {
 
         // Listen for changes
         this._settingsSignal = this._settings.connect('changed', (settings, key) => {
-            if (key === 'pet-count') {
+            if (key === 'gnomelet-count') {
                 this._updateCount();
-            } else if (key === 'pet-scale') {
+            } else if (key === 'gnomelet-scale') {
                 this._updateScale();
-            } else if (key === 'pet-type') {
+            } else if (key === 'gnomelet-type') {
                 this._updateImageSource();
                 this._hardReset();
             } else if (key === 'reset-trigger') {
@@ -517,7 +517,7 @@ class PetManager {
 
         // Load saved state if available
         let savedState = this._loadState();
-        this._spawnPets(savedState);
+        this._spawnGnomelets(savedState);
 
         // Start the Main Loop
         this._timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, UPDATE_INTERVAL_MS, () => {
@@ -540,7 +540,7 @@ class PetManager {
             this._settingsSignal = 0;
         }
 
-        this._destroyPets();
+        this._destroyGnomelets();
     }
 
     _loadState() {
@@ -551,90 +551,90 @@ class PetManager {
                     let decoder = new TextDecoder('utf-8');
                     let json = decoder.decode(contents);
                     let data = JSON.parse(json);
-                    console.log(`[Desktop Pets] Loaded state for ${data.length} pets.`);
+                    console.log(`[Gnomelets] Loaded state for ${data.length} gnomelets.`);
                     return data;
                 }
             }
         } catch (e) {
-            console.warn(`[Desktop Pets] Failed to load state: ${e.message}`);
+            console.warn(`[Gnomelets] Failed to load state: ${e.message}`);
         }
         return null; // No saved state
     }
 
     _saveState() {
         try {
-            let data = this._pets.map(p => p.serialize());
+            let data = this._gnomelets.map(p => p.serialize());
             let json = JSON.stringify(data);
             GLib.file_set_contents(this._cacheFile, json);
-            console.log(`[Desktop Pets] Saved state for ${data.length} pets.`);
+            console.log(`[Gnomelets] Saved state for ${data.length} gnomelets.`);
         } catch (e) {
-            console.warn(`[Desktop Pets] Failed to save state: ${e.message}`);
+            console.warn(`[Gnomelets] Failed to save state: ${e.message}`);
         }
     }
 
     _updateScale() {
-        console.log('[Desktop Pets] Updating scale for existing pets...');
-        for (let p of this._pets) {
+        console.log('[Gnomelets] Updating scale for existing gnomelets...');
+        for (let p of this._gnomelets) {
             p.updateScale();
         }
     }
 
     _hardReset() {
-        console.log('[Desktop Pets] Hard reset triggered.');
-        this._destroyPets();
+        console.log('[Gnomelets] Hard reset triggered.');
+        this._destroyGnomelets();
 
         // Delete cache file to prevent restoring old state
         try {
             let f = Gio.File.new_for_path(this._cacheFile);
             if (f.query_exists(null)) {
                 f.delete(null);
-                console.log('[Desktop Pets] Cache cleared.');
+                console.log('[Gnomelets] Cache cleared.');
             }
         } catch (e) {
-            console.warn(`[Desktop Pets] Failed to delete cache: ${e.message}`);
+            console.warn(`[Gnomelets] Failed to delete cache: ${e.message}`);
         }
 
-        this._spawnPets(null); // safely spawn new random pets
+        this._spawnGnomelets(null); // safely spawn new random gnomelets
     }
 
     _updateCount() {
-        let count = this._settings.get_int('pet-count');
-        let current = this._pets.length;
+        let count = this._settings.get_int('gnomelet-count');
+        let current = this._gnomelets.length;
 
         if (count > current) {
-            // Add new pets
+            // Add new gnomelets
             for (let i = 0; i < (count - current); i++) {
-                let p = new Pet(this._imagePath, this._imgW, this._imgH, this._settings);
-                this._pets.push(p);
+                let p = new Gnomelet(this._imagePath, this._imgW, this._imgH, this._settings);
+                this._gnomelets.push(p);
             }
         } else if (count < current) {
-            // Remove pets
+            // Remove gnomelets
             for (let i = 0; i < (current - count); i++) {
-                let p = this._pets.pop();
+                let p = this._gnomelets.pop();
                 p.destroy();
             }
         }
     }
 
-    _spawnPets(savedState) {
-        // Spawn pets based on user setting
-        let count = this._settings.get_int('pet-count');
-        console.log(`[Desktop Pets] Spawning ${count} pets.`);
+    _spawnGnomelets(savedState) {
+        // Spawn gnomelets based on user setting
+        let count = this._settings.get_int('gnomelet-count');
+        console.log(`[Gnomelets] Spawning ${count} gnomelets.`);
 
         for (let i = 0; i < count; i++) {
-            let p = new Pet(this._imagePath, this._imgW, this._imgH, this._settings);
+            let p = new Gnomelet(this._imagePath, this._imgW, this._imgH, this._settings);
             // Restore state if available for this index
             if (savedState && savedState[i]) {
                 p.deserialize(savedState[i]);
             }
-            this._pets.push(p);
+            this._gnomelets.push(p);
         }
     }
-    _destroyPets() {
-        for (let p of this._pets) {
+    _destroyGnomelets() {
+        for (let p of this._gnomelets) {
             p.destroy();
         }
-        this._pets = [];
+        this._gnomelets = [];
     }
 
     _tick() {
@@ -642,33 +642,38 @@ class PetManager {
         try {
             this._windows = [];
 
-            // Gather all visible windows from the shell
-            // We use global.window_group to get the actual Actor hierarchy
-            let actors = global.window_group.get_children();
-            for (let actor of actors) {
-                if (!actor.visible) continue;
+            let focusWindow = global.display.focus_window;
+            let maximizedFocused = focusWindow && focusWindow.is_maximized();
 
-                // Only care about actors that have a MetaWindow (real application windows)
-                if (actor.meta_window) {
-                    let rect = actor.meta_window.get_frame_rect();
-                    if (actor.meta_window.minimized) continue;
+            if (!maximizedFocused) {
+                // Gather all visible windows from the shell
+                // We use global.window_group to get the actual Actor hierarchy
+                let actors = global.window_group.get_children();
+                for (let actor of actors) {
+                    if (!actor.visible) continue;
 
-                    // Skip maximized windows to prevent pets from being hidden/off-screen
-                    if (actor.meta_window.is_maximized()) continue;
+                    // Only care about actors that have a MetaWindow (real application windows)
+                    if (actor.meta_window) {
+                        let rect = actor.meta_window.get_frame_rect();
+                        if (actor.meta_window.minimized) continue;
 
-                    this._windows.push({
-                        rect: rect,
-                        actor: actor
-                    });
+                        // Skip maximized windows to prevent gnomelets from being hidden/off-screen
+                        if (actor.meta_window.is_maximized()) continue;
+
+                        this._windows.push({
+                            rect: rect,
+                            actor: actor
+                        });
+                    }
                 }
             }
 
-            // Update individual pets
-            for (let p of this._pets) {
+            // Update individual gnomelets
+            for (let p of this._gnomelets) {
                 p.update(this._windows);
             }
         } catch (e) {
-            console.error(`[Desktop Pets] Error: ${e.message}`);
+            console.error(`[Gnomelets] Error: ${e.message}`);
         }
     }
 }
@@ -676,10 +681,10 @@ class PetManager {
 /**
  * Extension Entry Point
  */
-export default class DesktopPetsExtension extends Extension {
+export default class DesktopGnomeletsExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
-        this._manager = new PetManager(this._settings);
+        this._manager = new GnomeletManager(this._settings);
         this._manager.enable();
     }
 

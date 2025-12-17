@@ -4,7 +4,7 @@ import Gtk from 'gi://Gtk';
 
 import { ExtensionPreferences, gettext as _ } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-export default class DesktopPetsPreferences extends ExtensionPreferences {
+export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         const settings = this.getSettings();
 
@@ -12,27 +12,27 @@ export default class DesktopPetsPreferences extends ExtensionPreferences {
         const group = new Adw.PreferencesGroup();
         page.add(group);
 
-        // Pet Character Row
+        // Gnomelet Character Row
         const typeRow = new Adw.ComboRow({
-            title: 'Pet Character',
+            title: 'Gnomelet Character',
             model: new Gtk.StringList({
                 strings: ['Kitten', 'Puppy', 'Mouse', 'Squirrel', 'Santa Claus'],
             }),
         });
 
         const typeMap = ['kitten', 'puppy', 'mouse', 'squirrel', 'santa'];
-        const currentType = settings.get_string('pet-type');
+        const currentType = settings.get_string('gnomelet-type');
         const initialIndex = typeMap.indexOf(currentType);
         typeRow.set_selected(initialIndex >= 0 ? initialIndex : 0);
 
         typeRow.connect('notify::selected', () => {
             const selectedType = typeMap[typeRow.selected];
-            settings.set_string('pet-type', selectedType);
+            settings.set_string('gnomelet-type', selectedType);
         });
         group.add(typeRow);
 
-        // Pet Count Row
-        const countRow = new Adw.ActionRow({ title: 'Number of Pets' });
+        // Gnomelet Count Row
+        const countRow = new Adw.ActionRow({ title: 'Number of Gnomelets' });
         const countSpin = new Gtk.SpinButton({
             adjustment: new Gtk.Adjustment({
                 lower: 1,
@@ -41,12 +41,12 @@ export default class DesktopPetsPreferences extends ExtensionPreferences {
             }),
             valign: Gtk.Align.CENTER,
         });
-        settings.bind('pet-count', countSpin, 'value', Gio.SettingsBindFlags.DEFAULT);
+        settings.bind('gnomelet-count', countSpin, 'value', Gio.SettingsBindFlags.DEFAULT);
         countRow.add_suffix(countSpin);
         group.add(countRow);
 
-        // Pet Scale Row
-        const scaleRow = new Adw.ActionRow({ title: 'Pet Size (px)' });
+        // Gnomelet Scale Row
+        const scaleRow = new Adw.ActionRow({ title: 'Gnomelet Size (px)' });
         const scaleSpin = new Gtk.SpinButton({
             adjustment: new Gtk.Adjustment({
                 lower: 32,
@@ -55,7 +55,7 @@ export default class DesktopPetsPreferences extends ExtensionPreferences {
             }),
             valign: Gtk.Align.CENTER,
         });
-        settings.bind('pet-scale', scaleSpin, 'value', Gio.SettingsBindFlags.DEFAULT);
+        settings.bind('gnomelet-scale', scaleSpin, 'value', Gio.SettingsBindFlags.DEFAULT);
         scaleRow.add_suffix(scaleSpin);
         group.add(scaleRow);
 
@@ -92,7 +92,7 @@ export default class DesktopPetsPreferences extends ExtensionPreferences {
 
         const respawnRow = new Adw.ActionRow({ title: 'Reset State' });
         const respawnButton = new Gtk.Button({
-            label: 'Respawn Pets',
+            label: 'Respawn Gnomelets',
             valign: Gtk.Align.CENTER,
         });
 

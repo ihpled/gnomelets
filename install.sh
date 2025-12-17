@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Configuration
-UUID="desktop-pets@mcast.gnomext.com"
+UUID="gnomelets@mcast.gnomext.com"
 INSTALL_DIR="$HOME/.local/share/gnome-shell/extensions/$UUID"
 SOURCE_DIR=$(pwd)
 
-echo "🚧 Building and Installing Desktop Pets Extension..." // turbo
+echo "🚧 Building and Installing Gnomelets Extension..." // turbo
 
 # 1. Compile Schemas
 echo "⚙️ Compiling schemas..."

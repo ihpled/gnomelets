@@ -1,7 +1,11 @@
 {
-    "uuid": "desktop-pets@mcast.gnomext.com",
-    "name": "Desktop Pets",
-    "description": "Animated kittens walking on your windows.",
+    "name": "Gnomelets",
+    "description": "Small animated characters walking on your windows.",
+    "uuid": "gnomelets@mcast.gnomext.com",
+    "donations": {
+        "paypal": "MCastaldo"
+    },
+    "settings-schema": "org.gnome.shell.extensions.gnomelets",
     "shell-version": [
         "45",
         "46",
@@ -9,7 +13,6 @@
         "48",
         "49"
     ],
-    "url": "https://github.com/mauro/desktop-pets",
-    "version": 1,
-    "settings-schema": "org.gnome.shell.extensions.desktop-pets"
+    "url": "https://github.com/ihpled/gnomelets",
+    "version": 1
 }
