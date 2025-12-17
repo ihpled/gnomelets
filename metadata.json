@@ -1,6 +1,6 @@
 {
     "name": "Gnomelets",
-    "description": "Small animated characters walking on your windows.",
+    "description": "Gnomelets 🎅\n\nBrighten up your GNOME desktop with Gnomelets! This extension brings small, animated 2D characters to life, letting them roam freely across your screen. They walk, jump, and even balance on top of your open windows.\n\nWatch as they fall from the top of the screen, land on your active windows, and explore your desktop environment with charming pixel-art animations.\n\n🎄 Christmas Special Edition 🎄\n\nIn the spirit of the holiday season, we have added a special guest: Santa Claus! \nYou can now select Santa as your desktop companion to bring some festive cheer to your workflow.\n\nFeatures:\n\n- Physics-based Movement: Gnomelets obey gravity, falling naturally and landing on solid surfaces.\n- Window Interaction: They detect open windows and can walk along their title bars and top edges.\n- Pixel-Art Animations: Smooth idle, walking, jumping, and falling animations.\n- State Persistence: Gnomelets remember where they were even after you restart the shell or disable/enable the extension.\n- Multi-Monitor Support: They can travel across your screens.",
     "uuid": "gnomelets@mcast.gnomext.com",
     "donations": {
         "paypal": "MCastaldo"

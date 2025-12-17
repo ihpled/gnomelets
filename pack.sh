@@ -10,7 +10,12 @@ fi
 # Zip the extension files
 # -r: recurse into directories
 # -x: exclude the following patterns
-zip -r "$ZIP_NAME" extension.js metadata.json prefs.js schemas/org.gnome.shell.extensions.gnomelets.gschema.xml images/
+zip -r "$ZIP_NAME" extension.js \
+    metadata.json \
+    prefs.js \
+    schemas/org.gnome.shell.extensions.gnomelets.gschema.xml \
+    README.md \
+    images/ \
     
 
 echo "Created $ZIP_NAME"
