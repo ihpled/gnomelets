@@ -23,12 +23,12 @@
       <description>The kind of gnomelet to display.</description>
     </key>
     <key name="gnomelet-count" type="i">
-      <default>3</default>
+      <default>5</default>
       <summary>Number of Gnomelets</summary>
       <description>The number of gnomelets to spawn.</description>
     </key>
     <key name="gnomelet-scale" type="i">
-      <default>64</default>
+      <default>48</default>
       <summary>Gnomelet Scale</summary>
       <description>The target height of the gnomelet in pixels.</description>
     </key>
