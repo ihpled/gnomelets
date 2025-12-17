@@ -6,6 +6,7 @@ import Gio from 'gi://Gio';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import GdkPixbuf from 'gi://GdkPixbuf';
+import Cogl from 'gi://Cogl'; // Necessario per i formati pixel
 
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -24,34 +25,34 @@ const State = {
     JUMPING: 'JUMPING'
 };
 
+function isWindowMaximized(window) {
+    return window.maximized_horizontally && window.maximized_vertically;
+}
+
 /**
  * Gnomelet Class
  * Represents a single animated kitten on the screen.
- * Handles rendering, physics, AI, and window interactions.
+ * REFACTOR: Uses Pre-sliced Clutter.Images instead of Canvas or CSS.
+ * This avoids VM/Wayland clipping bugs AND avoids Clutter.Canvas constructor issues.
  */
 const Gnomelet = GObject.registerClass(
     class Gnomelet extends GObject.Object {
-        _init(imagePath, sheetWidth, sheetHeight, settings) {
+        _init(pixbuf, sheetWidth, sheetHeight, settings) {
             super._init();
 
             this._settings = settings;
-            console.log(`[Gnomelets] Gnomelet init: sheet=${sheetWidth}x${sheetHeight}`);
 
             // --- Initialization ---
-            // Start falling from the top of the screen at a random X position
-            this._state = State.FALLING;
             // Start falling from the top of the screen at a random X position
             this._state = State.FALLING;
             this._vx = 0; // Velocity X
             this._vy = 0; // Velocity Y
 
             // --- Animation State ---
-            this._frame = 0;           // Current sprite frame index
-            this._animationTimer = 0;  // Counter for animation timing
+            this._frame = 0; // Current sprite frame index
+            this._animationTimer = 0; // Counter for animation timing
             this._savedFacing = Math.random() > 0.5; // Initial Direction (replaces _facingRight)
-            this._idleTimer = 0;       // Countdown for how long to sit idle
-
-            this._imagePath = imagePath;
+            this._idleTimer = 0; // Countdown for how long to sit idle
 
             // --- Configurable Dimensions ---
             // We calculate the optimal display size based on the source image size
@@ -69,40 +70,63 @@ const Gnomelet = GObject.registerClass(
 
             this._randomizeStartPos();
 
-            // --- Actor Hierarchy (Rendering) ---
-            // We use a "Hardware Scissor" technique for rendering sprites.
-            // 1. Container (this.actor): A generic Widget sized to a SINGLE frame. 
-            //    It clips its children (`clip_to_allocation: true`), acting as a viewport.
-            this.actor = new St.Widget({
+            // --- Texture Preparation (Slice the Atlas) ---
+            // We create 6 Clutter.Images, one for each frame.
+            this._frameImages = [];
+
+            try {
+                const hasAlpha = pixbuf.get_has_alpha();
+                const pixelFormat = hasAlpha ? Cogl.PixelFormat.RGBA_8888 : Cogl.PixelFormat.RGB_888;
+                const nChannels = hasAlpha ? 4 : 3;
+                const rowStride = pixbuf.get_rowstride();
+
+                for (let i = 0; i < 6; i++) {
+                    // Create a sub-buffer for this frame (no copy, just reference)
+                    let srcX = i * this._frameWidth;
+                    let subPixbuf = pixbuf.new_subpixbuf(srcX, 0, this._frameWidth, this._frameHeight);
+
+                    // Create a Clutter.Image content
+                    let img = new Clutter.Image();
+
+                    // Upload pixel data to GPU
+                    // Note: new_subpixbuf shares data, but get_pixels() returns the pointer.
+                    // However, we need to point to the start of the subpixbuf.
+                    // Actually, subpixbuf.get_pixels() returns the correct offset pointer in C,
+                    // and GJS maps it to a Uint8Array. 
+                    // Clutter.Image.set_data handles the copy.
+
+                    let success = img.set_data(
+                        subPixbuf.get_pixels(),
+                        pixelFormat,
+                        this._frameWidth,
+                        this._frameHeight,
+                        subPixbuf.get_rowstride()
+                    );
+
+                    if (success) {
+                        this._frameImages.push(img);
+                    } else {
+                        console.error(`[Gnomelets] Failed to create texture for frame ${i}`);
+                        this._frameImages.push(null); // Placeholder
+                    }
+                }
+            } catch (e) {
+                console.error(`[Gnomelets] Error preparing textures: ${e.message}`);
+            }
+
+            // --- Actor Setup ---
+            this.actor = new Clutter.Actor({
                 visible: true,
-                reactive: false,     // Click-through
-                x_expand: false,
-                y_expand: false,
+                reactive: false,
                 width: this._displayW,
                 height: this._displayH,
-                clip_to_allocation: true
+                content_gravity: Clutter.ContentGravity.RESIZE_ASPECT,
             });
 
-            // 2. Sprite Actor (this._spriteActor): Holds the entire sprite sheet image.
-            //    It is much wider than the container. We animate by moving this actor
-            //    left/right inside the container to reveal different frames.
-            this._spriteW = this._displayW * 6;
-            this._spriteH = this._displayH;
-
-            this._spriteActor = new St.Widget({
-                width: this._spriteW,
-                height: this._spriteH
-            });
-
-            // Apply the sprite sheet image via CSS
-            let fileUrl = `file://${this._imagePath}`;
-            this._spriteActor.set_style(`
-                background-image: url("${fileUrl}");
-                background-size: ${this._spriteW}px ${this._spriteH}px;
-                background-repeat: no-repeat;
-            `);
-
-            this.actor.add_child(this._spriteActor);
+            // Set initial content
+            if (this._frameImages.length > 0 && this._frameImages[0]) {
+                this.actor.set_content(this._frameImages[0]);
+            }
 
             // --- Initial Placement ---
             // Add to the Shell's generic UI layer (Chrome) initially.
@@ -136,28 +160,9 @@ const Gnomelet = GObject.registerClass(
             this.actor.set_width(this._displayW);
             this.actor.set_height(this._displayH);
 
-            // Sprite
-            this._spriteW = this._displayW * 6;
-            this._spriteH = this._displayH;
-
-            this._spriteActor.set_width(this._spriteW);
-            this._spriteActor.set_height(this._spriteH);
-
-            let fileUrl = `file://${this._imagePath}`;
-            this._spriteActor.set_style(`
-                background-image: url("${fileUrl}");
-                background-size: ${this._spriteW}px ${this._spriteH}px;
-                background-repeat: no-repeat;
-            `);
-
             // Adjust Y position so feet stay at the same level
-            // newY + newH = oldY + oldH  =>  newY = oldY + oldH - newH
             this._y = this._y + oldH - this._displayH;
             this.actor.set_position(this._x, this._y);
-
-            // Force frame update
-            this.setFrame(0); // Temporary reset to ensure visuals update immediately
-            this._updateAnimation();
         }
 
         serialize() {
@@ -472,11 +477,17 @@ const Gnomelet = GObject.registerClass(
         }
 
         setFrame(frameIndex) {
-            // "Scroll" the sprite sheet inside the container
-            let moveX = -(frameIndex * this._displayW);
-            this._spriteActor.set_position(Math.floor(moveX), 0);
+            if (this._frame === frameIndex && this._lastFacing === this.facingRight) return;
 
-            // Handle facing direction via scaling (flipping)
+            this._frame = frameIndex;
+            this._lastFacing = this.facingRight;
+
+            // Swap the content to the pre-loaded Clutter.Image for this frame
+            if (this._frameImages && this._frameImages[frameIndex]) {
+                this.actor.set_content(this._frameImages[frameIndex]);
+            }
+
+            // Facing via Actor scaling (mirroring)
             this.actor.set_pivot_point(0.5, 0.5);
             if (this.facingRight) {
                 this.actor.scale_x = 1;
@@ -497,6 +508,7 @@ const Gnomelet = GObject.registerClass(
                 this.actor.destroy();
                 this.actor = null;
             }
+            this._frameImages = [];
         }
     });
 
@@ -511,6 +523,7 @@ class GnomeletManager {
         this._windows = [];
         this._timerId = 0;
         this._imagePath = null;
+        this._pixbuf = null; // Store loaded pixbuf
         this._imgW = 0;
         this._imgH = 0;
         this._cacheFile = GLib.get_user_cache_dir() + '/gnomelets-state.json';
@@ -527,21 +540,22 @@ class GnomeletManager {
         let imageFile = dir.get_child('images').get_child(`${type}.png`);
         this._imagePath = imageFile.get_path();
 
-        // Pre-load image dimensions info using GdkPixbuf
         try {
-            let pb = GdkPixbuf.Pixbuf.new_from_file(this._imagePath);
-            this._imgW = pb.get_width();
-            this._imgH = pb.get_height();
+            // Keep the Pixbuf in memory to pass to Gnomelets for drawing
+            this._pixbuf = GdkPixbuf.Pixbuf.new_from_file(this._imagePath);
+            this._imgW = this._pixbuf.get_width();
+            this._imgH = this._pixbuf.get_height();
             console.log(`[Gnomelets] Loaded image for ${type}: ${this._imgW}x${this._imgH}`);
         } catch (e) {
             console.error(`[Gnomelets] Failed to load image info for ${type}: ${e.message}`);
+            this._pixbuf = null;
             this._imgW = 0;
             this._imgH = 0;
         }
     }
 
     enable() {
-        if (!this._imagePath || this._imgW === 0) return;
+        if (!this._pixbuf) return;
 
         // Listen for changes
         this._settingsSignal = this._settings.connect('changed', (settings, key) => {
@@ -583,6 +597,7 @@ class GnomeletManager {
         }
 
         this._destroyGnomelets();
+        this._pixbuf = null; // Free memory
     }
 
     _loadState() {
@@ -593,7 +608,6 @@ class GnomeletManager {
                     let decoder = new TextDecoder('utf-8');
                     let json = decoder.decode(contents);
                     let data = JSON.parse(json);
-                    console.log(`[Gnomelets] Loaded state for ${data.length} gnomelets.`);
                     return data;
                 }
             }
@@ -608,21 +622,18 @@ class GnomeletManager {
             let data = this._gnomelets.map(p => p.serialize());
             let json = JSON.stringify(data);
             GLib.file_set_contents(this._cacheFile, json);
-            console.log(`[Gnomelets] Saved state for ${data.length} gnomelets.`);
         } catch (e) {
             console.warn(`[Gnomelets] Failed to save state: ${e.message}`);
         }
     }
 
     _updateScale() {
-        console.log('[Gnomelets] Updating scale for existing gnomelets...');
         for (let p of this._gnomelets) {
             p.updateScale();
         }
     }
 
     _hardReset() {
-        console.log('[Gnomelets] Hard reset triggered.');
         this._destroyGnomelets();
 
         // Delete cache file to prevent restoring old state
@@ -630,13 +641,12 @@ class GnomeletManager {
             let f = Gio.File.new_for_path(this._cacheFile);
             if (f.query_exists(null)) {
                 f.delete(null);
-                console.log('[Gnomelets] Cache cleared.');
             }
         } catch (e) {
             console.warn(`[Gnomelets] Failed to delete cache: ${e.message}`);
         }
 
-        this._spawnGnomelets(null); // safely spawn new random gnomelets
+        this._spawnGnomelets(null);
     }
 
     _updateCount() {
@@ -646,7 +656,7 @@ class GnomeletManager {
         if (count > current) {
             // Add new gnomelets
             for (let i = 0; i < (count - current); i++) {
-                let p = new Gnomelet(this._imagePath, this._imgW, this._imgH, this._settings);
+                let p = new Gnomelet(this._pixbuf, this._imgW, this._imgH, this._settings);
                 this._gnomelets.push(p);
             }
         } else if (count < current) {
@@ -661,8 +671,6 @@ class GnomeletManager {
     _spawnGnomelets(savedState) {
         // Spawn gnomelets based on user setting
         let count = this._settings.get_int('gnomelet-count');
-        console.log(`[Gnomelets] Spawning ${count} gnomelets.`);
-
         for (let i = 0; i < count; i++) {
             let p = new Gnomelet(this._pixbuf, this._imgW, this._imgH, this._settings);
             if (savedState && savedState[i]) {
@@ -671,6 +679,7 @@ class GnomeletManager {
             this._gnomelets.push(p);
         }
     }
+
     _destroyGnomelets() {
         for (let p of this._gnomelets) {
             p.destroy();
@@ -682,9 +691,8 @@ class GnomeletManager {
         // Wrap tick in try-catch to prevent extension crash from transient errors
         try {
             this._windows = [];
-
             let focusWindow = global.display.focus_window;
-            let maximizedFocused = focusWindow && focusWindow.is_maximized();
+            let maximizedFocused = focusWindow && isWindowMaximized(focusWindow);
 
             if (!maximizedFocused) {
                 // Gather all visible windows from the shell
@@ -697,9 +705,8 @@ class GnomeletManager {
                     if (actor.meta_window) {
                         let rect = actor.meta_window.get_frame_rect();
                         if (actor.meta_window.minimized) continue;
-
                         // Skip maximized windows to prevent gnomelets from being hidden/off-screen
-                        if (actor.meta_window.is_maximized()) continue;
+                        if (isWindowMaximized(actor.meta_window)) continue;
 
                         this._windows.push({
                             rect: rect,
@@ -737,4 +744,3 @@ export default class DesktopGnomeletsExtension extends Extension {
         this._settings = null;
     }
 }
-
