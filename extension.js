@@ -297,7 +297,7 @@ const Gnomelet = GObject.registerClass(
                     let jumped = false;
                     if (this._state === State.WALKING) {
                         // "Jump for falling": Chance to jump when reaching the edge
-                        if (Math.random() < 0.8) {
+                        if (Math.random() < 0.5) {
                             this._performJump();
                             jumped = true;
                         }
