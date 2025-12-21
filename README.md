@@ -18,7 +18,7 @@ You can now select Santa as your desktop companion to bring some festive cheer t
 *   **Pixel-Art Animations**: Smooth idle, walking, jumping, and falling animations.
 *   **State Persistence**: Gnomelets remember where they were even after you restart the shell or disable/enable the extension.
 *   **Multi-Monitor Support**: They can travel and spawn across all your connected screens.
-*   **Smart AI Behavior**: Gnomelets employ intelligent jumping mechanics detecting edges to perform daring leaps and identify reachable overhead windows to climb upwards.
+*   **Smart AI Behavior**: Gnomelets employ intelligent jumping mechanics, detecting edges to perform daring leaps and predicting reachable windows to climb upwards dynamically.
 
 ## Configuration
 

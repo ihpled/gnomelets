@@ -12,6 +12,7 @@ const UPDATE_INTERVAL_MS = 50; // Update loop runs every 50ms (~20 FPS)
 const GRAVITY = 2;             // Vertical acceleration per frame
 const WALK_SPEED = 3;          // Horizontal pixels per frame
 const JUMP_VELOCITY = -20;     // Initial jump force (negative is up)
+const JUMP_REACH_X = (WALK_SPEED * 2) * Math.abs(JUMP_VELOCITY / GRAVITY); // Max horizontal travel during jump ascent
 
 // State Machine Definitions for the Gnomelet
 const State = {
@@ -336,8 +337,19 @@ const Gnomelet = GObject.registerClass(
                     if (landedOnWindow && win === landedOnWindow) continue;
 
                     let rect = win.rect;
+
+                    let effectiveMinX = rect.x;
+                    let effectiveMaxX = rect.x + rect.width;
+
                     // Check if window is horizontally within range of our feet
-                    if (currFeetX >= rect.x && currFeetX <= rect.x + rect.width) {
+                    // We extend the "virtual" window size if we are approaching it from the side
+                    if (currFeetX < rect.x && this.facingRight) {
+                        effectiveMinX -= JUMP_REACH_X;
+                    } else if (currFeetX > rect.x + rect.width && !this.facingRight) {
+                        effectiveMaxX += JUMP_REACH_X;
+                    }
+
+                    if (currFeetX >= effectiveMinX && currFeetX <= effectiveMaxX) {
                         // Check if window is vertically above us and reachable
                         // Window top (rect.y) must be less than feet (currFeetY)
                         let dist = currFeetY - rect.y;
