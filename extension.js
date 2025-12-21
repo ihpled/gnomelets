@@ -358,7 +358,7 @@ const Gnomelet = GObject.registerClass(
 
                 // If useful, chance to jump
                 if (canJump) {
-                    if (Math.random() < 0.05) {
+                    if (Math.random() < 0.25) {
                         this._performJump();
                     }
                 }
