@@ -6,6 +6,8 @@ import GdkPixbuf from 'gi://GdkPixbuf';
 
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 // --- Configuration Constants ---
 const UPDATE_INTERVAL_MS = 50; // Update loop runs every 50ms (~20 FPS)
@@ -511,6 +513,7 @@ class GnomeletManager {
         this._resources = {};
         this._cacheFile = GLib.get_user_cache_dir() + '/gnomelets-state.json';
         this._pendingState = null;
+        this._isPaused = false;
     }
 
     /**
@@ -633,6 +636,29 @@ class GnomeletManager {
         });
     }
 
+    get isVisualizationEnabled() {
+        return !this._isPaused;
+    }
+
+    toggleVisualization() {
+        this._isPaused = !this._isPaused;
+        if (this._isPaused) {
+            if (this._timerId) {
+                GLib.source_remove(this._timerId);
+                this._timerId = 0;
+            }
+            this._destroyGnomelets();
+        } else {
+            if (!this._timerId) {
+                this._timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, UPDATE_INTERVAL_MS, () => {
+                    this._tick();
+                    return GLib.SOURCE_CONTINUE;
+                });
+            }
+            this._spawnGnomelets(null);
+        }
+    }
+
     /**
      * Enables manager, listeners, and the main timer.
      */
@@ -737,6 +763,7 @@ class GnomeletManager {
      * Adds or removes characters based on settings count.
      */
     _updateCount() {
+        if (this._isPaused) return;
         let count = this._settings.get_int('gnomelet-count');
         let current = this._gnomelets.length;
         let type = this._settings.get_string('gnomelet-type');
@@ -756,6 +783,7 @@ class GnomeletManager {
     }
 
     _spawnGnomelets(savedState) {
+        if (this._isPaused) return;
         // Ensure we don't spawn if we were disabled while loading
         if (!this._cancellable || this._cancellable.is_cancelled()) return;
 
@@ -812,6 +840,49 @@ class GnomeletManager {
     }
 }
 
+const GnomeletIndicator = GObject.registerClass(
+    class GnomeletIndicator extends PanelMenu.Button {
+        _init(extension) {
+            super._init(0.0, 'Gnomelets Indicator');
+
+            this._extension = extension;
+            this._manager = extension._manager;
+
+            let iconPath = extension.dir.get_child('images').get_child('icon.svg');
+            let gicon = new Gio.FileIcon({ file: iconPath });
+            let icon = new St.Icon({
+                gicon: gicon,
+                style_class: 'system-status-icon',
+            });
+            this.add_child(icon);
+
+            // Item: Re-spawn
+            this.respawnItem = new PopupMenu.PopupMenuItem('Re-spawn Gnomelets');
+            this.respawnItem.connect('activate', () => {
+                this._manager._hardReset();
+            });
+            this.menu.addMenuItem(this.respawnItem);
+
+            // Item: Toggle
+            this.toggleItem = new PopupMenu.PopupMenuItem('');
+            this.toggleItem.connect('activate', () => {
+                this._manager.toggleVisualization();
+                this._updateToggleLabel();
+            });
+            this.menu.addMenuItem(this.toggleItem);
+
+            this._updateToggleLabel();
+        }
+
+        _updateToggleLabel() {
+            if (this._manager.isVisualizationEnabled) {
+                this.toggleItem.label.text = 'Disable Gnomelets';
+            } else {
+                this.toggleItem.label.text = 'Enable Gnomelets';
+            }
+        }
+    });
+
 /**
  * Extension Entry Point
  */
@@ -820,10 +891,16 @@ export default class DesktopGnomeletsExtension extends Extension {
         this._settings = this.getSettings();
         this._manager = new GnomeletManager(this._settings);
         this._manager.enable();
+        this._indicator = new GnomeletIndicator(this);
+        Main.panel.addToStatusArea('gnomelets-indicator', this._indicator);
     }
 
     disable() {
         if (this._manager) {
+            if (this._indicator) {
+                this._indicator.destroy();
+                this._indicator = null;
+            }
             this._manager.disable();
             this._manager = null;
         }
