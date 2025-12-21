@@ -13,6 +13,7 @@ const GRAVITY = 2;             // Vertical acceleration per frame
 const WALK_SPEED = 3;          // Horizontal pixels per frame
 const JUMP_VELOCITY = -20;     // Initial jump force (negative is up)
 const JUMP_REACH_X = (WALK_SPEED * 2) * Math.abs(JUMP_VELOCITY / GRAVITY); // Max horizontal travel during jump ascent
+const MAX_JUMP_HEIGHT = (JUMP_VELOCITY * JUMP_VELOCITY) / (2 * GRAVITY); // Max vertical travel during jump ascent
 
 // State Machine Definitions for the Gnomelet
 const State = {
@@ -321,13 +322,8 @@ const Gnomelet = GObject.registerClass(
                 }
 
                 // Logic: "Jump only when useful" - Check for window overhead
-                // Max jump height is approx 90-100px given GRAVITY=2, JUMP_VELOCITY=-20
-                const MAX_JUMP_HEIGHT = 100;
                 let canJump = false;
 
-                // feetX and feetY were calculated earlier (lines 174-175)
-                // but we need them based on current position? 
-                // Using the values from line 174 is fine as position hasn't changed since then (collision adjusted _y though).
                 // Let's recalculate precise feet position after collision adjustments
                 let currFeetY = this._y + this._displayH;
                 let currFeetX = this._x + this._displayW / 2;
