@@ -11,14 +11,7 @@
       <description>Whether gnomelets on the floor appear in front of or behind all windows.</description>
     </key>
     <key name="gnomelet-type" type="s">
-      <choices>
-        <choice value="kitten"/>
-        <choice value="puppy"/>
-        <choice value="mouse"/>
-        <choice value="squirrel"/>
-        <choice value="santa"/>
-      </choices>
-      <default>'santa'</default>
+      <default>"Santa"</default>
       <summary>Gnomelet Character</summary>
       <description>The kind of gnomelet to display.</description>
     </key>

@@ -455,51 +455,127 @@ class GnomeletManager {
         // Resource cache: { [type: string]: { frames: GIcon[], w: int, h: int } }
         this._resources = {};
         this._cacheFile = GLib.get_user_cache_dir() + '/gnomelets-state.json';
-
-        this._loadCurrentResources();
+        this._pendingState = null;
     }
 
     /**
-     * Loads PNG images for the selected character type.
+     * Helper to resolve the correct folder for a given type name asynchronously.
      */
-    _loadCurrentResources() {
-        let type = this._settings.get_string('gnomelet-type') || 'kitten';
-        if (this._resources[type]) return;
-
-        let frames = [];
-        let frameW = 0;
-        let frameH = 0;
-        let anySuccess = false;
+    _resolveImageFolderAsync(typeName, callback) {
+        if (!typeName) {
+            callback(null);
+            return;
+        }
 
         let file = Gio.File.new_for_uri(import.meta.url);
-        let dir = file.get_parent();
-        let typeDir = dir.get_child('images').get_child(type);
+        let imagesDir = file.get_parent().get_child('images');
+        let typeDir = imagesDir.get_child(typeName);
 
-        for (let i = 0; i < 6; i++) {
-            let imgFile = typeDir.get_child(`${i}.png`);
-            if (!imgFile.query_exists(null)) {
-                frames.push(null);
-                continue;
-            }
-
-            try {
-                // Read real dimensions from PNGs for physics calculation
-                let pixbuf = GdkPixbuf.Pixbuf.new_from_file(imgFile.get_path());
-                if (frameW === 0) {
-                    frameW = pixbuf.get_width();
-                    frameH = pixbuf.get_height();
+        typeDir.query_info_async(
+            Gio.FILE_ATTRIBUTE_STANDARD_TYPE,
+            Gio.FileQueryInfoFlags.NONE,
+            GLib.PRIORITY_DEFAULT,
+            null,
+            (obj, res) => {
+                try {
+                    let info = obj.query_info_finish(res);
+                    if (info.get_file_type() === Gio.FileType.DIRECTORY) {
+                        callback(typeDir);
+                    } else {
+                        callback(null);
+                    }
+                } catch (e) {
+                    callback(null);
                 }
-                let icon = new Gio.FileIcon({ file: imgFile });
-                frames.push(icon);
-                anySuccess = true;
-            } catch (e) {
-                frames.push(null);
             }
+        );
+    }
+
+    /**
+     * Loads PNG images for the selected character type async.
+     * Then calls the next step (spawn or reset).
+     */
+    _loadResourcesAndSpawn(hardReset = false) {
+        let type = this._settings.get_string('gnomelet-type');
+
+        // If already loaded, proceed immediately
+        // Note: If type changed but we already had resources for it, good.
+        // But usually type changes to something new.
+        if (this._resources[type]) {
+            if (hardReset) {
+                this._hardReset();
+            } else {
+                this._spawnGnomelets(null);
+            }
+            return;
         }
 
-        if (anySuccess && frameW > 0 && frameH > 0) {
-            this._resources[type] = { frames, w: frameW, h: frameH };
-        }
+        this._resolveImageFolderAsync(type, async (typeDir) => {
+            if (!typeDir) return;
+
+            let frames = [];
+            let frameW = 0;
+            let frameH = 0;
+            let anySuccess = false;
+
+            const loadFrame = (index) => {
+                return new Promise((resolve) => {
+                    let imgFile = typeDir.get_child(`${index}.png`);
+
+                    imgFile.read_async(GLib.PRIORITY_DEFAULT, this._cancellable, (file, res) => {
+                        try {
+                            let stream = file.read_finish(res);
+                            GdkPixbuf.Pixbuf.new_from_stream_async(stream, this._cancellable, (source, res2) => {
+                                try {
+                                    let pixbuf = GdkPixbuf.Pixbuf.new_from_stream_finish(res2);
+                                    stream.close(null); // Clean up stream
+
+                                    resolve({
+                                        valid: true,
+                                        w: pixbuf.get_width(),
+                                        h: pixbuf.get_height(),
+                                        icon: new Gio.FileIcon({ file: imgFile })
+                                    });
+                                } catch (e) {
+                                    try { stream.close(null); } catch (err) { }
+                                    resolve({ valid: false });
+                                }
+                            });
+                        } catch (e) {
+                            // File not found or readable
+                            resolve({ valid: false });
+                        }
+                    });
+                });
+            };
+
+            let promises = [];
+            for (let i = 0; i < 6; i++) {
+                promises.push(loadFrame(i));
+            }
+
+            let results = await Promise.all(promises);
+
+            for (let res of results) {
+                if (res && res.valid) {
+                    frames.push(res.icon);
+                    if (frameW === 0) {
+                        frameW = res.w;
+                        frameH = res.h;
+                    }
+                    anySuccess = true;
+                } else {
+                    frames.push(null);
+                }
+            }
+
+            if (anySuccess && frameW > 0 && frameH > 0) {
+                this._resources[type] = { frames, w: frameW, h: frameH };
+            }
+
+            if (hardReset) this._hardReset();
+            else this._spawnGnomelets(null);
+        });
     }
 
     /**
@@ -511,14 +587,14 @@ class GnomeletManager {
             if (key === 'gnomelet-count') this._updateCount();
             else if (key === 'gnomelet-scale') this._updateScale();
             else if (key === 'gnomelet-type') {
-                this._loadCurrentResources();
-                this._hardReset();
+                // Trigger async load and reset
+                this._loadResourcesAndSpawn(true);
             } else if (key === 'reset-trigger') this._hardReset();
         });
 
         // Async load: Start loading state asynchronously.
         // The gnomelets will spawn in the callback.
-        this._loadStateAndSpawn();
+        this._loadStateAsync();
 
         this._timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, UPDATE_INTERVAL_MS, () => {
             this._tick();
@@ -551,8 +627,9 @@ class GnomeletManager {
 
     /**
      * Loads saved state from JSON cache file asynchronously.
+     * When done, it triggers resource loading, then spawning.
      */
-    _loadStateAndSpawn() {
+    _loadStateAsync() {
         let file = Gio.File.new_for_path(this._cacheFile);
 
         file.load_contents_async(this._cancellable, (obj, res) => {
@@ -568,8 +645,8 @@ class GnomeletManager {
                 if (e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED)) return;
             }
 
-            // Proceed to spawn characters (empty state starts fresh)
-            this._spawnGnomelets(savedState);
+            this._pendingState = savedState;
+            this._loadResourcesAndSpawn(false);
         });
     }
 
@@ -581,7 +658,6 @@ class GnomeletManager {
             let data = this._gnomelets.map(p => p.serialize());
             // NOTE: Using synchronous write on disable is generally accepted 
             // because we need to ensure state is saved before the extension object dies.
-            // If strictly required, this could be replace_contents_async, but tricky during disable().
             GLib.file_set_contents(this._cacheFile, JSON.stringify(data));
         } catch (e) { }
     }
@@ -608,7 +684,7 @@ class GnomeletManager {
     _updateCount() {
         let count = this._settings.get_int('gnomelet-count');
         let current = this._gnomelets.length;
-        let type = this._settings.get_string('gnomelet-type') || 'kitten';
+        let type = this._settings.get_string('gnomelet-type');
         let res = this._resources[type];
         if (!res) return;
 
@@ -629,16 +705,25 @@ class GnomeletManager {
         if (!this._cancellable || this._cancellable.is_cancelled()) return;
 
         let count = this._settings.get_int('gnomelet-count');
-        let type = this._settings.get_string('gnomelet-type') || 'kitten';
+        let type = this._settings.get_string('gnomelet-type');
         let res = this._resources[type];
-        if (!res) return;
+
+        // If resource is somehow missing (and we are here not via _loadResourcesAndSpawn), abort.
+        if (!res) {
+            this._loadResourcesAndSpawn(false);
+            return;
+        }
 
         // If we already have gnomelets (e.g. rapid reload), clear them first
         if (this._gnomelets.length > 0) this._destroyGnomelets();
 
+        // Use pending state if available
+        let stateToUse = savedState || this._pendingState;
+        this._pendingState = null; // consume it
+
         for (let i = 0; i < count; i++) {
             let p = new Gnomelet(res.frames, res.w, res.h, this._settings);
-            if (savedState && savedState[i]) p.deserialize(savedState[i]);
+            if (stateToUse && stateToUse[i]) p.deserialize(stateToUse[i]);
             this._gnomelets.push(p);
         }
     }

@@ -12,20 +12,33 @@ You can now select Santa as your desktop companion to bring some festive cheer t
 
 ## Features
 
+*   **Custom Characters**: Easily add your own pixel-art characters.
 *   **Physics-based Movement**: Gnomelets obey gravity, falling naturally and landing on solid surfaces.
 *   **Window Interaction**: They detect open windows and can walk along their title bars and top edges.
 *   **Pixel-Art Animations**: Smooth idle, walking, jumping, and falling animations.
 *   **State Persistence**: Gnomelets remember where they were even after you restart the shell or disable/enable the extension.
-*   **Multi-Monitor Support**: They can travel across your screens.
+*   **Multi-Monitor Support**: They can travel and spawn across all your connected screens.
 
 ## Configuration
 
 You can customize your experience via the extension settings:
 
-*   **Character Type**: Choose between different sprites (e.g., Kitten, and the new **Santa Claus**!).
+*   **Character Type**: Choose between different sprites (e.g., Kitten, Puppy, Tux and the new **Santa Claus**!). The list automatically updates with any new folders found in the `images` directory.
 *   **Population Control**: Decide how many gnomelets you want roaming your screen at once.
 *   **Scale**: Adjust the size of the characters to fit your screen resolution or preference.
 *   **Z-Order**: Choose whether gnomelets walk in front of your windows or behind them on the desktop floor.
+
+## Adding Custom Characters
+
+Want to add your own character? It's easy!
+
+1.  Navigate to the extension's `images` folder (usually in `~/.local/share/gnome-shell/extensions/gnomelets@.../images`).
+2.  Create a new folder with your character's name (e.g., `Robot`).
+3.  Add 6 PNG image files named `0.png` through `5.png` inside that folder.
+    *   **0.png - 3.png**: Walking animation frames.
+    *   **4.png**: Idle frame.
+    *   **5.png**: Jumping/Falling frame.
+4.  Reload the extension or restart GNOME Shell. Your new character will appear in the settings dropdown!
 
 ## Installation
 

@@ -1,6 +1,7 @@
 import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
 import Gtk from 'gi://Gtk';
+import GLib from 'gi://GLib';
 
 import { ExtensionPreferences, gettext as _ } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
@@ -15,19 +16,53 @@ export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
         // Gnomelet Character Row
         const typeRow = new Adw.ComboRow({
             title: 'Gnomelet Character',
-            model: new Gtk.StringList({
-                strings: ['Kitten', 'Puppy', 'Mouse', 'Squirrel', 'Santa Claus'],
-            }),
+            model: new Gtk.StringList({ strings: ['Loading...'] }),
         });
+        typeRow.set_sensitive(false);
 
-        const typeMap = ['kitten', 'puppy', 'mouse', 'squirrel', 'santa'];
-        const currentType = settings.get_string('gnomelet-type');
-        const initialIndex = typeMap.indexOf(currentType);
-        typeRow.set_selected(initialIndex >= 0 ? initialIndex : 0);
+        // Dynamic listing of gnomelet types
+        const file = Gio.File.new_for_uri(import.meta.url);
+        const imagesDir = file.get_parent().get_child('images');
+
+        imagesDir.enumerate_children_async(
+            'standard::name,standard::type',
+            Gio.FileQueryInfoFlags.NONE,
+            GLib.PRIORITY_DEFAULT,
+            null,
+            (obj, res) => {
+                let types = [];
+                try {
+                    let enumerator = obj.enumerate_children_finish(res);
+                    let info;
+                    while ((info = enumerator.next_file(null))) {
+                        if (info.get_file_type() === Gio.FileType.DIRECTORY) {
+                            types.push(info.get_name());
+                        }
+                    }
+                } catch (e) {
+                    console.error('Failed to list gnomelet types:', e);
+                }
+
+                types.sort();
+                if (types.length === 0) types.push('Santa');
+
+                typeRow.model = new Gtk.StringList({ strings: types });
+                typeRow.set_sensitive(true);
+
+                const currentType = settings.get_string('gnomelet-type');
+                let initialIndex = types.indexOf(currentType);
+
+                // Set the selected index to the current type, or the first type if not found
+                typeRow.set_selected(initialIndex >= 0 ? initialIndex : 0);
+            }
+        );
 
         typeRow.connect('notify::selected', () => {
-            const selectedType = typeMap[typeRow.selected];
-            settings.set_string('gnomelet-type', selectedType);
+            if (!typeRow.sensitive) return;
+            const selectedType = typeRow.model.get_string(typeRow.selected);
+            if (selectedType && selectedType !== 'Loading...') {
+                settings.set_string('gnomelet-type', selectedType);
+            }
         });
         group.add(typeRow);
 
