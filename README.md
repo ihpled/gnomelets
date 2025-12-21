@@ -19,12 +19,13 @@ You can now select Santa as your desktop companion to bring some festive cheer t
 *   **State Persistence**: Gnomelets remember where they were even after you restart the shell or disable/enable the extension.
 *   **Multi-Monitor Support**: They can travel and spawn across all your connected screens.
 *   **Smart AI Behavior**: Gnomelets employ intelligent jumping mechanics, detecting edges to perform daring leaps and predicting reachable windows to climb upwards dynamically.
+*   **Top Bar Controls**: A convenient menu in the top bar lets you instantly re-spawn all gnomelets or toggle their visibility on/off without opening settings.
 
 ## Configuration
 
 You can customize your experience via the extension settings:
 
-*   **Character Type**: Choose between different sprites (e.g., Kitten, Puppy, Tux and the new **Santa Claus**!). The list automatically updates with any new folders found in the `images` directory.
+*   **Character Selection**: Select one or more characters (e.g., Kitten, Santa Claus, etc.) from the list. If multiple are selected, they will appear randomly! The list automatically updates with any new folders found in the `images` directory.
 *   **Population Control**: Decide how many gnomelets you want roaming your screen at once.
 *   **Scale**: Adjust the size of the characters to fit your screen resolution or preference.
 *   **Z-Order**: Choose whether gnomelets walk in front of your windows or behind them on the desktop floor.

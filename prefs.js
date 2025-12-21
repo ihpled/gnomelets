@@ -13,12 +13,12 @@ export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
         const group = new Adw.PreferencesGroup();
         page.add(group);
 
-        // Gnomelet Character Row
-        const typeRow = new Adw.ComboRow({
-            title: 'Gnomelet Character',
-            model: new Gtk.StringList({ strings: ['Loading...'] }),
+        // Gnomelet Character Group
+        const charExpander = new Adw.ExpanderRow({
+            title: 'Gnomelet Characters',
+            subtitle: 'Select which gnomelets to display',
         });
-        typeRow.set_sensitive(false);
+        group.add(charExpander);
 
         // Dynamic listing of gnomelet types
         const file = Gio.File.new_for_uri(import.meta.url);
@@ -46,25 +46,36 @@ export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
                 types.sort();
                 if (types.length === 0) types.push('Santa');
 
-                typeRow.model = new Gtk.StringList({ strings: types });
-                typeRow.set_sensitive(true);
+                // Get currently selected types (array of strings)
+                let currentTypes = settings.get_strv('gnomelet-type');
+                // Handle case where migration from string might have left it empty or weird, though schema handles default.
+                // Let's assume it works or returns default.
 
-                const currentType = settings.get_string('gnomelet-type');
-                let initialIndex = types.indexOf(currentType);
+                // Ensure we have a set for easier lookup
+                let selectedSet = new Set(currentTypes);
 
-                // Set the selected index to the current type, or the first type if not found
-                typeRow.set_selected(initialIndex >= 0 ? initialIndex : 0);
+                types.forEach(type => {
+                    const row = new Adw.ActionRow({ title: type });
+                    const check = new Gtk.CheckButton({
+                        active: selectedSet.has(type),
+                        valign: Gtk.Align.CENTER,
+                    });
+
+                    check.connect('toggled', () => {
+                        let current = new Set(settings.get_strv('gnomelet-type'));
+                        if (check.active) {
+                            current.add(type);
+                        } else {
+                            current.delete(type);
+                        }
+                        settings.set_strv('gnomelet-type', [...current]);
+                    });
+
+                    row.add_suffix(check);
+                    charExpander.add_row(row);
+                });
             }
         );
-
-        typeRow.connect('notify::selected', () => {
-            if (!typeRow.sensitive) return;
-            const selectedType = typeRow.model.get_string(typeRow.selected);
-            if (selectedType && selectedType !== 'Loading...') {
-                settings.set_string('gnomelet-type', selectedType);
-            }
-        });
-        group.add(typeRow);
 
         // Gnomelet Count Row
         const countRow = new Adw.ActionRow({ title: 'Number of Gnomelets' });
