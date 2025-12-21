@@ -450,6 +450,7 @@ class GnomeletManager {
         this._settings = settings;
         this._windows = [];
         this._timerId = 0;
+        this._cancellable = null;
 
         // Resource cache: { [type: string]: { frames: GIcon[], w: int, h: int } }
         this._resources = {};
@@ -505,6 +506,7 @@ class GnomeletManager {
      * Enables manager, listeners, and the main timer.
      */
     enable() {
+        this._cancellable = new Gio.Cancellable();
         this._settingsSignal = this._settings.connect('changed', (settings, key) => {
             if (key === 'gnomelet-count') this._updateCount();
             else if (key === 'gnomelet-scale') this._updateScale();
@@ -514,8 +516,9 @@ class GnomeletManager {
             } else if (key === 'reset-trigger') this._hardReset();
         });
 
-        let savedState = this._loadState();
-        this._spawnGnomelets(savedState);
+        // Async load: Start loading state asynchronously.
+        // The gnomelets will spawn in the callback.
+        this._loadStateAndSpawn();
 
         this._timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, UPDATE_INTERVAL_MS, () => {
             this._tick();
@@ -527,6 +530,12 @@ class GnomeletManager {
      * Disables everything and saves current state.
      */
     disable() {
+        // Cancel any pending async load
+        if (this._cancellable) {
+            this._cancellable.cancel();
+            this._cancellable = null;
+        }
+
         this._saveState();
         if (this._timerId) {
             GLib.source_remove(this._timerId);
@@ -541,19 +550,27 @@ class GnomeletManager {
     }
 
     /**
-     * Loads saved state from JSON cache file.
+     * Loads saved state from JSON cache file asynchronously.
      */
-    _loadState() {
-        try {
-            if (GLib.file_test(this._cacheFile, GLib.FileTest.EXISTS)) {
-                let [success, contents] = GLib.file_get_contents(this._cacheFile);
+    _loadStateAndSpawn() {
+        let file = Gio.File.new_for_path(this._cacheFile);
+
+        file.load_contents_async(this._cancellable, (obj, res) => {
+            let savedState = null;
+            try {
+                let [success, contents, etag] = obj.load_contents_finish(res);
                 if (success) {
                     let decoder = new TextDecoder('utf-8');
-                    return JSON.parse(decoder.decode(contents));
+                    savedState = JSON.parse(decoder.decode(contents));
                 }
+            } catch (e) {
+                // Ignore cancellation errors or missing files
+                if (e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED)) return;
             }
-        } catch (e) { }
-        return null;
+
+            // Proceed to spawn characters (empty state starts fresh)
+            this._spawnGnomelets(savedState);
+        });
     }
 
     /**
@@ -562,6 +579,9 @@ class GnomeletManager {
     _saveState() {
         try {
             let data = this._gnomelets.map(p => p.serialize());
+            // NOTE: Using synchronous write on disable is generally accepted 
+            // because we need to ensure state is saved before the extension object dies.
+            // If strictly required, this could be replace_contents_async, but tricky during disable().
             GLib.file_set_contents(this._cacheFile, JSON.stringify(data));
         } catch (e) { }
     }
@@ -576,6 +596,7 @@ class GnomeletManager {
         this._destroyGnomelets();
         try {
             let f = Gio.File.new_for_path(this._cacheFile);
+            // This delete is synchronous but very fast and rare (user triggered).
             if (f.query_exists(null)) f.delete(null);
         } catch (e) { }
         this._spawnGnomelets(null);
@@ -604,10 +625,16 @@ class GnomeletManager {
     }
 
     _spawnGnomelets(savedState) {
+        // Ensure we don't spawn if we were disabled while loading
+        if (!this._cancellable || this._cancellable.is_cancelled()) return;
+
         let count = this._settings.get_int('gnomelet-count');
         let type = this._settings.get_string('gnomelet-type') || 'kitten';
         let res = this._resources[type];
         if (!res) return;
+
+        // If we already have gnomelets (e.g. rapid reload), clear them first
+        if (this._gnomelets.length > 0) this._destroyGnomelets();
 
         for (let i = 0; i < count; i++) {
             let p = new Gnomelet(res.frames, res.w, res.h, this._settings);

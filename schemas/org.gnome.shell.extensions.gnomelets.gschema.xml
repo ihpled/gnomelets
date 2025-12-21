@@ -18,7 +18,7 @@
         <choice value="squirrel"/>
         <choice value="santa"/>
       </choices>
-      <default>'kitten'</default>
+      <default>'santa'</default>
       <summary>Gnomelet Character</summary>
       <description>The kind of gnomelet to display.</description>
     </key>
