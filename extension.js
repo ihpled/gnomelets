@@ -285,13 +285,27 @@ const Gnomelet = GObject.registerClass(
 
             // --- State Machine Transitions ---
             if (onGround) {
+                // On ground
                 if (this._state === State.FALLING || this._state === State.JUMPING) {
                     this._vy = 0;
                     this._pickNewAction();
                 }
             } else {
+                // Not on ground
                 if (this._state !== State.JUMPING) {
-                    this._state = State.FALLING;
+                    // Logic: If we were walking and now we are not on ground, we are walking off an edge.
+                    let jumped = false;
+                    if (this._state === State.WALKING) {
+                        // "Jump for falling": Chance to jump when reaching the edge
+                        if (Math.random() < 0.8) {
+                            this._performJump();
+                            jumped = true;
+                        }
+                    }
+
+                    if (!jumped) {
+                        this._state = State.FALLING;
+                    }
                 }
             }
 
@@ -304,10 +318,43 @@ const Gnomelet = GObject.registerClass(
                     this._vx = 0;
                     this._idleTimer = Math.random() * 60 + 20;
                 }
-                // Small chance to jump
-                if (Math.random() < 0.01) {
-                    this._performJump();
+
+                // Logic: "Jump only when useful" - Check for window overhead
+                // Max jump height is approx 90-100px given GRAVITY=2, JUMP_VELOCITY=-20
+                const MAX_JUMP_HEIGHT = 100;
+                let canJump = false;
+
+                // feetX and feetY were calculated earlier (lines 174-175)
+                // but we need them based on current position? 
+                // Using the values from line 174 is fine as position hasn't changed since then (collision adjusted _y though).
+                // Let's recalculate precise feet position after collision adjustments
+                let currFeetY = this._y + this._displayH;
+                let currFeetX = this._x + this._displayW / 2;
+
+                for (let win of windows) {
+                    // Skip the window we are currently standing on
+                    if (landedOnWindow && win === landedOnWindow) continue;
+
+                    let rect = win.rect;
+                    // Check if window is horizontally within range of our feet
+                    if (currFeetX >= rect.x && currFeetX <= rect.x + rect.width) {
+                        // Check if window is vertically above us and reachable
+                        // Window top (rect.y) must be less than feet (currFeetY)
+                        let dist = currFeetY - rect.y;
+                        if (dist > 0 && dist <= MAX_JUMP_HEIGHT) {
+                            canJump = true;
+                            break;
+                        }
+                    }
                 }
+
+                // If useful, chance to jump
+                if (canJump) {
+                    if (Math.random() < 0.05) {
+                        this._performJump();
+                    }
+                }
+
             } else if (this._state === State.IDLE) {
                 this._vx = 0;
                 this._idleTimer--;
