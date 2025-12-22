@@ -674,6 +674,29 @@ class GnomeletManager {
     }
 
     /**
+     * Starts the update timer if not already running.
+     * Prevents duplicate timers and ensures single source of truth.
+     */
+    _startTimer() {
+        if (this._timerId) return;
+
+        this._timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, UPDATE_INTERVAL_MS, () => {
+            this._tick();
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
+    /**
+     * Stops the update timer if running.
+     */
+    _stopTimer() {
+        if (this._timerId) {
+            GLib.source_remove(this._timerId);
+            this._timerId = 0;
+        }
+    }
+
+    /**
      * Enables manager, listeners, and the main timer.
      */
     enable() {
@@ -696,10 +719,7 @@ class GnomeletManager {
         this._loadStateAsync();
 
         if (!this._isPaused) {
-            this._timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, UPDATE_INTERVAL_MS, () => {
-                this._tick();
-                return GLib.SOURCE_CONTINUE;
-            });
+            this._startTimer();
         }
     }
 
@@ -714,10 +734,8 @@ class GnomeletManager {
         }
 
         this._saveState();
-        if (this._timerId) {
-            GLib.source_remove(this._timerId);
-            this._timerId = 0;
-        }
+        this._stopTimer();
+
         if (this._settingsSignal) {
             this._settings.disconnect(this._settingsSignal);
             this._settingsSignal = 0;
@@ -901,18 +919,10 @@ class GnomeletManager {
         this._isPaused = !enabled;
 
         if (this._isPaused) {
-            if (this._timerId) {
-                GLib.source_remove(this._timerId);
-                this._timerId = 0;
-            }
+            this._stopTimer();
             this._destroyGnomelets();
         } else {
-            if (!this._timerId) {
-                this._timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, UPDATE_INTERVAL_MS, () => {
-                    this._tick();
-                    return GLib.SOURCE_CONTINUE;
-                });
-            }
+            this._startTimer();
             // If we have pending state (e.g. from initial load), it will be used.
             // Otherwise, normal spawn.
             this._spawnGnomelets(null);
@@ -945,13 +955,6 @@ const GnomeletIndicator = GObject.registerClass(
                 }
             });
 
-            this.connect('destroy', () => {
-                if (this._settingsSignal) {
-                    extension._settings.disconnect(this._settingsSignal);
-                    this._settingsSignal = null;
-                }
-            });
-
             // Item: Re-spawn
             this.respawnItem = new PopupMenu.PopupMenuItem('Re-spawn Gnomelets');
             this.respawnItem.connect('activate', () => {
@@ -976,6 +979,14 @@ const GnomeletIndicator = GObject.registerClass(
                 this.toggleItem.label.text = 'Enable Gnomelets';
             }
         }
+
+        destroy() {
+            if (this._settingsSignal) {
+                this._extension._settings.disconnect(this._settingsSignal);
+                this._settingsSignal = null;
+            }
+            super.destroy();
+        }
     });
 
 /**
@@ -991,14 +1002,16 @@ export default class DesktopGnomeletsExtension extends Extension {
     }
 
     disable() {
+        if (this._indicator) {
+            this._indicator.destroy();
+            this._indicator = null;
+        }
+
         if (this._manager) {
-            if (this._indicator) {
-                this._indicator.destroy();
-                this._indicator = null;
-            }
             this._manager.disable();
             this._manager = null;
         }
+
         this._settings = null;
     }
 }
