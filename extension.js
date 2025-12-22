@@ -969,6 +969,15 @@ const GnomeletIndicator = GObject.registerClass(
             });
             this.menu.addMenuItem(this.toggleItem);
 
+            this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+            // Item: Settings
+            this.settingsItem = new PopupMenu.PopupMenuItem('Settings');
+            this.settingsItem.connect('activate', () => {
+                this._extension.openPreferences();
+            });
+            this.menu.addMenuItem(this.settingsItem);
+
             this._updateToggleLabel();
         }
 
