@@ -105,29 +105,17 @@ export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
         scaleRow.add_suffix(scaleSpin);
         group.add(scaleRow);
 
-        // Floor Z-Order Row
-        const zOrderRow = new Adw.ComboRow({
-            title: 'Floor Z-Order',
-            model: new Gtk.StringList({
-                strings: ['Front (Overlay)', 'Back (Desktop)'],
-            }),
+        // In Front of Maximized (mapped to floor-z-order)
+        const zOrderRow = new Adw.SwitchRow({
+            title: 'In Front of Maximized',
+            subtitle: 'If disabled, gnomelets will be behind maximized windows',
         });
 
-        // Map index 0->'front', 1->'back'
-        // We need manually bind or use mapped values. 
-        // Simple manual sync for clarity:
-        if (settings.get_string('floor-z-order') === 'back') {
-            zOrderRow.set_selected(1);
-        } else {
-            zOrderRow.set_selected(0);
-        }
+        // Manual binding to map boolean switch to string values
+        zOrderRow.active = (settings.get_string('floor-z-order') === 'front');
 
-        zOrderRow.connect('notify::selected', () => {
-            if (zOrderRow.selected === 1) {
-                settings.set_string('floor-z-order', 'back');
-            } else {
-                settings.set_string('floor-z-order', 'front');
-            }
+        zOrderRow.connect('notify::active', () => {
+            settings.set_string('floor-z-order', zOrderRow.active ? 'front' : 'back');
         });
 
         group.add(zOrderRow);

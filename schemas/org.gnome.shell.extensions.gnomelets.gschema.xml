@@ -7,8 +7,8 @@
         <choice value="back"/>
       </choices>
       <default>'front'</default>
-      <summary>Floor Z-Order</summary>
-      <description>Whether gnomelets on the floor appear in front of or behind all windows.</description>
+      <summary>In Front of Maximized</summary>
+      <description>If set to 'front', gnomelets on the floor stay on top of maximized windows. If 'back', they stay on the desktop layer behind windows.</description>
     </key>
     <key name="gnomelet-type" type="as">
       <default>['Santa']</default>
