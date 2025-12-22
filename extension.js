@@ -543,7 +543,7 @@ class GnomeletManager {
         this._resources = {};
         this._cacheFile = GLib.get_user_cache_dir() + '/gnomelets-state.json';
         this._pendingState = null;
-        this._isPaused = false;
+        this._isPaused = !this._settings.get_boolean('is-enabled');
     }
 
     /**
@@ -579,6 +579,9 @@ class GnomeletManager {
         );
     }
 
+    /**
+     * Loads resources and spawns gnomelets.
+     */
     async _loadResourcesAndSpawn(hardReset = false) {
         let types = this._settings.get_strv('gnomelet-type');
         if (!types || types.length === 0) types = ['Santa'];
@@ -662,23 +665,12 @@ class GnomeletManager {
         return !this._isPaused;
     }
 
+    /**
+     * Toggles the visualization state.
+     */
     toggleVisualization() {
-        this._isPaused = !this._isPaused;
-        if (this._isPaused) {
-            if (this._timerId) {
-                GLib.source_remove(this._timerId);
-                this._timerId = 0;
-            }
-            this._destroyGnomelets();
-        } else {
-            if (!this._timerId) {
-                this._timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, UPDATE_INTERVAL_MS, () => {
-                    this._tick();
-                    return GLib.SOURCE_CONTINUE;
-                });
-            }
-            this._spawnGnomelets(null);
-        }
+        let current = this._settings.get_boolean('is-enabled');
+        this._settings.set_boolean('is-enabled', !current);
     }
 
     /**
@@ -692,17 +684,23 @@ class GnomeletManager {
             else if (key === 'gnomelet-type') {
                 // Trigger async load and reset
                 this._loadResourcesAndSpawn(true);
-            } else if (key === 'reset-trigger') this._hardReset();
+            } else if (key === 'reset-trigger') {
+                this._hardReset();
+            } else if (key === 'is-enabled') {
+                this._updateEnabledState();
+            }
         });
 
         // Async load: Start loading state asynchronously.
         // The gnomelets will spawn in the callback.
         this._loadStateAsync();
 
-        this._timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, UPDATE_INTERVAL_MS, () => {
-            this._tick();
-            return GLib.SOURCE_CONTINUE;
-        });
+        if (!this._isPaused) {
+            this._timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, UPDATE_INTERVAL_MS, () => {
+                this._tick();
+                return GLib.SOURCE_CONTINUE;
+            });
+        }
     }
 
     /**
@@ -894,8 +892,37 @@ class GnomeletManager {
             for (let p of this._gnomelets) p.update(this._windows);
         } catch (e) { }
     }
+
+    /**
+     * Updates the enabled state of the extension.
+     */
+    _updateEnabledState() {
+        let enabled = this._settings.get_boolean('is-enabled');
+        this._isPaused = !enabled;
+
+        if (this._isPaused) {
+            if (this._timerId) {
+                GLib.source_remove(this._timerId);
+                this._timerId = 0;
+            }
+            this._destroyGnomelets();
+        } else {
+            if (!this._timerId) {
+                this._timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, UPDATE_INTERVAL_MS, () => {
+                    this._tick();
+                    return GLib.SOURCE_CONTINUE;
+                });
+            }
+            // If we have pending state (e.g. from initial load), it will be used.
+            // Otherwise, normal spawn.
+            this._spawnGnomelets(null);
+        }
+    }
 }
 
+/**
+ * Indicator for the extension.
+ */
 const GnomeletIndicator = GObject.registerClass(
     class GnomeletIndicator extends PanelMenu.Button {
         _init(extension) {
@@ -904,13 +931,26 @@ const GnomeletIndicator = GObject.registerClass(
             this._extension = extension;
             this._manager = extension._manager;
 
-            let iconPath = extension.dir.get_child('images').get_child('icon.svg');
+            let iconPath = extension.dir.get_child('images').get_child('icon.png');
             let gicon = new Gio.FileIcon({ file: iconPath });
             let icon = new St.Icon({
                 gicon: gicon,
                 style_class: 'system-status-icon',
             });
             this.add_child(icon);
+
+            this._settingsSignal = extension._settings.connect('changed', (settings, key) => {
+                if (key === 'is-enabled') {
+                    this._updateToggleLabel();
+                }
+            });
+
+            this.connect('destroy', () => {
+                if (this._settingsSignal) {
+                    extension._settings.disconnect(this._settingsSignal);
+                    this._settingsSignal = null;
+                }
+            });
 
             // Item: Re-spawn
             this.respawnItem = new PopupMenu.PopupMenuItem('Re-spawn Gnomelets');
@@ -923,7 +963,6 @@ const GnomeletIndicator = GObject.registerClass(
             this.toggleItem = new PopupMenu.PopupMenuItem('');
             this.toggleItem.connect('activate', () => {
                 this._manager.toggleVisualization();
-                this._updateToggleLabel();
             });
             this.menu.addMenuItem(this.toggleItem);
 

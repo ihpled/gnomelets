@@ -30,5 +30,10 @@
       <summary>Reset Trigger</summary>
       <description>Toggle this to respawn all gnomelets.</description>
     </key>
+    <key name="is-enabled" type="b">
+      <default>true</default>
+      <summary>Is Enabled</summary>
+      <description>Whether the gnomelets are visible/active.</description>
+    </key>
   </schema>
 </schemalist>
