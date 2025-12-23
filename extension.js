@@ -281,7 +281,7 @@ const Gnomelet = GObject.registerClass(
         /**
          * Main update loop for the gnomelet.
          */
-        update(windows) {
+        update(windows, forceBackground) {
             if (!this.actor) return; // Guard against updates after destruction
             if (this._state === State.DRAGGING) return; // Suspended physics while dragging
 
@@ -389,21 +389,17 @@ const Gnomelet = GObject.registerClass(
                 // Place it right above the window it landed on
                 global.window_group.set_child_above_sibling(this.actor, landedOnWindow.actor);
 
-            } else if (onGround && !landedOnWindow) {
-                // If on the floor, follow user settings (Allow/Partial/Disallow)
-                let floorMode = this._settings.get_string('floor-z-order');
+            } else {
+                // If on the floor, apply calculated Z-order preference (passed from Manager)
                 let parent = this.actor.get_parent();
 
-                let shouldBeInFront = (floorMode === 'allow');
-
-                if (shouldBeInFront) {
+                if (!forceBackground) {
                     if (parent !== Main.layoutManager.uiGroup) {
                         if (parent) parent.remove_child(this.actor);
                         Main.layoutManager.addChrome(this.actor);
                     }
                 } else {
-                    // For 'partial' or 'disallow', if we are on the floor, we are likely behind windows.
-                    // We prefer Background Group.
+                    // Background Group
                     let bgGroup = Main.layoutManager._backgroundGroup;
                     if (bgGroup && parent !== bgGroup) {
                         if (parent === Main.layoutManager.uiGroup) {
@@ -509,30 +505,39 @@ const Gnomelet = GObject.registerClass(
         /**
          * Sets the initial layer for the actor based on the floor z-order setting.
          */
-        _resetLayer() {
+        /**
+         * Determines if the gnomelet should be in the background layer.
+         */
+        _isBackgroundMode() {
             let floorMode = this._settings.get_string('floor-z-order');
-            let spawnInBackground = false;
+            if (floorMode === 'allow') return false;
 
-            if (floorMode === 'allow') {
-                spawnInBackground = false;
-            } else if (floorMode === 'partial') {
-                // Partial: Background only if focused window is maximized
-                let focusWindow = global.display.focus_window;
-                spawnInBackground = focusWindow && isWindowMaximized(focusWindow);
-            } else if (floorMode === 'disallow') {
-                // Disallow: Background if ANY visible window is maximized
-                let actors = global.window_group.get_children();
-                for (let actor of actors) {
-                    // Important: Check for NORMAL window type to avoid detecting desktop icons/docks as maximized
-                    if (actor.visible && actor.meta_window && !actor.meta_window.minimized &&
-                        actor.meta_window.get_window_type() === Meta.WindowType.NORMAL &&
-                        isWindowMaximized(actor.meta_window)) {
-                        spawnInBackground = true;
-                        break;
-                    }
-                }
+            let focusWindow = global.display.focus_window;
+            let focusedIsMaximized = focusWindow && isWindowMaximized(focusWindow);
+
+            if (floorMode === 'partial') {
+                return focusedIsMaximized;
             }
 
+            // Disallow logic: Background if ANY visible window is maximized
+            if (focusedIsMaximized) return true;
+
+            let actors = global.window_group.get_children();
+            for (let actor of actors) {
+                if (actor.visible && actor.meta_window && !actor.meta_window.minimized &&
+                    actor.meta_window.get_window_type() === Meta.WindowType.NORMAL &&
+                    isWindowMaximized(actor.meta_window)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * Sets the initial layer for the actor based on the floor z-order setting.
+         */
+        _resetLayer() {
+            let spawnInBackground = this._isBackgroundMode();
             let parent = this.actor.get_parent();
 
             if (spawnInBackground) {
@@ -1055,57 +1060,95 @@ class GnomeletManager {
             let focusWindow = global.display.focus_window;
             let floorMode = this._settings.get_string('floor-z-order');
 
-            // 1. Find indices of maximized windows.
-            // highestMaximizedIndex = topmost (last in list) maximized window.
-            // lowestMaximizedIndex = bottommost (first in list) maximized window.
-            let highestMaximizedIndex = -1;
-            let lowestMaximizedIndex = -1;
+            // Helper to check maximization
+            const isMax = (w) => w && !w.minimized &&
+                w.get_window_type() === Meta.WindowType.NORMAL &&
+                isWindowMaximized(w);
 
-            for (let i = 0; i < actors.length; i++) {
-                let actor = actors[i];
-                if (actor.visible && actor.meta_window && !actor.meta_window.minimized &&
-                    actor.meta_window.get_window_type() === Meta.WindowType.NORMAL &&
-                    isWindowMaximized(actor.meta_window)) {
+            // 1. Gather Key Indices
+            let focusedIndex = -1;
+            let maximizedIndices = [];
 
-                    // Logic for Disallow: Track the absolute lowest (first found) maximized window
-                    if (lowestMaximizedIndex === -1) {
-                        lowestMaximizedIndex = i;
-                    }
-
-                    // Logic for Partial: Track highest, but respect focus exclusion
-                    if (floorMode === 'partial' && actor.meta_window === focusWindow) {
-                        // Skip updating highest if it's the focused window in partial mode
-                    } else {
-                        highestMaximizedIndex = i;
-                    }
-                }
-            }
-
-            // 2. Collect valid windows for landing.
             for (let i = 0; i < actors.length; i++) {
                 let actor = actors[i];
                 if (!actor.visible || !actor.meta_window) continue;
 
-                // Skip if the window itself is minimized or maximized.
-                if (actor.meta_window.minimized || isWindowMaximized(actor.meta_window)) continue;
-
-                if (floorMode === 'disallow') {
-                    // Disallow: Only land on windows BEHIND the lowest maximized window.
-                    // If a maximized window exists, ignore everything at or above its level.
-                    // Important: We only apply this filter if a valid maximized window was found (lowest > -1)
-                    if (lowestMaximizedIndex > -1 && i >= lowestMaximizedIndex) continue;
-                } else {
-                    // Allow/Partial: Only land on windows IN FRONT OF the highest relevant maximized window.
-                    // If index is lower than highest max window, we skip it (it's obscured).
-                    if (highestMaximizedIndex > -1 && i <= highestMaximizedIndex) continue;
+                if (actor.meta_window === focusWindow) {
+                    focusedIndex = i;
                 }
+                if (isMax(actor.meta_window)) {
+                    maximizedIndices.push(i);
+                }
+            }
+
+            // 2. Determine Filter Bounds & Background Mode
+            // We want to accept windows with index I where: minIndex < I < maxIndex
+            let minIndex = -1;
+            let maxIndex = actors.length;
+            let forceBackground = false;
+
+            let focusedIsMaximized = (focusedIndex !== -1) && isMax(actors[focusedIndex].meta_window);
+
+            if (floorMode === 'partial') {
+                if (focusedIsMaximized) {
+                    // PARTIAL (Maximized Focus):
+                    // Range: (Previous Max) < I < (Focused Max)
+                    // If no previous max, minIndex = -1.
+                    forceBackground = true;
+                    maxIndex = focusedIndex;
+
+                    // Find closest max index smaller than focusedIndex
+                    let prevMax = -1;
+                    for (let idx of maximizedIndices) {
+                        if (idx < focusedIndex) prevMax = idx;
+                        else break; // maximizingIndices is sorted ascending because we pushed in loop I=0..N
+                    }
+                    minIndex = prevMax;
+
+                } else {
+                    // PARTIAL (Unmaximized Focus) -> Acts like ALLOW
+                    forceBackground = false;
+                    if (maximizedIndices.length > 0) {
+                        // Occlusion: Ignore windows below the TOPMOST maximized window
+                        minIndex = maximizedIndices[maximizedIndices.length - 1];
+                    }
+                }
+            } else if (floorMode === 'disallow') {
+                // DISALLOW:
+                // Range: I < (Bottommost Max)
+                if (maximizedIndices.length > 0) {
+                    forceBackground = true;
+                    maxIndex = maximizedIndices[0]; // First one found is bottommost
+                } else {
+                    forceBackground = false; // No maximized windows, behave normally
+                }
+
+            } else {
+                // ALLOW:
+                // Range: I > (Topmost Max) (Occlusion logic)
+                forceBackground = false;
+                if (maximizedIndices.length > 0) {
+                    minIndex = maximizedIndices[maximizedIndices.length - 1];
+                }
+            }
+
+            // 3. Collect Valid Windows
+            for (let i = 0; i < actors.length; i++) {
+                // Strict bounds check
+                if (i <= minIndex || i >= maxIndex) continue;
+
+                let actor = actors[i];
+                if (!actor.visible || !actor.meta_window) continue;
+                if (actor.meta_window.minimized || isMax(actor.meta_window)) continue;
 
                 let rect = actor.meta_window.get_frame_rect();
                 this._windows.push({ rect, actor });
             }
 
-            for (let p of this._gnomelets) p.update(this._windows);
-        } catch (e) { }
+            for (let p of this._gnomelets) p.update(this._windows, forceBackground);
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     _updateInteractions() {
