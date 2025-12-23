@@ -4,6 +4,7 @@ import Gio from 'gi://Gio';
 import GdkPixbuf from 'gi://GdkPixbuf';
 import Meta from 'gi://Meta';
 import St from 'gi://St';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import { Gnomelet } from './gnomelet.js';
 import { isWindowMaximized, UPDATE_INTERVAL_MS } from './utils.js';
@@ -477,6 +478,30 @@ export const GnomeletManager = GObject.registerClass(
 
                     let rect = actor.meta_window.get_frame_rect();
                     this._windows.push({ rect, actor });
+                }
+
+                // 4. (New) Find Dash-to-Dock
+                // Dash-to-Dock places its main container (DashToDock) in uiGroup.
+                // We identify it by its constructor name.
+                let uiChildren = Main.layoutManager.uiGroup.get_children();
+                for (let child of uiChildren) {
+                    if (child.visible && child.mapped && child.constructor && child.constructor.name === 'DashToDock') {
+                        let dashToDock = child;
+                        for (let child of dashToDock.get_children()) {
+                            // DashSlideContainer is the main non-transparent container for the dock
+                            if (child.constructor && child.constructor.name === 'DashSlideContainer') {
+                                let [x, y] = child.get_transformed_position();
+                                let [w, h] = child.get_transformed_size();
+
+                                // Only count it if it has dimensions
+                                if (w > 0 && h > 0) {
+                                    // Create a rect object compatible with Meta.Window rect interface (x, y, width, height)
+                                    let rect = { x: Math.floor(x), y: Math.floor(y), width: Math.floor(w), height: Math.floor(h) };
+                                    this._windows.push({ rect, actor: child });
+                                }
+                            }
+                        }
+                    }
                 }
 
                 for (let p of this._gnomelets) p.update(this._windows, forceBackground);

@@ -21,11 +21,6 @@ export default class DesktopGnomeletsExtension extends Extension {
     }
 
     disable() {
-        if (this._settings) {
-            this._settings.disconnectObject(this);
-            this._settings = null;
-        }
-
         if (this._indicator) {
             this._indicator.destroy();
             this._indicator = null;
@@ -34,6 +29,11 @@ export default class DesktopGnomeletsExtension extends Extension {
         if (this._manager) {
             this._manager.disable();
             this._manager = null;
+        }
+
+        if (this._settings) {
+            this._settings.disconnectObject(this);
+            this._settings = null;
         }
     }
 
