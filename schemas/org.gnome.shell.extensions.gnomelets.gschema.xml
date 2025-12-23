@@ -41,6 +41,11 @@
       <summary>Is Enabled</summary>
       <description>Whether the gnomelets are visible/active.</description>
     </key>
+    <key name="show-indicator" type="b">
+      <default>true</default>
+      <summary>Show Indicator</summary>
+      <description>Whether to show the indicator in the top panel.</description>
+    </key>
     <key name="allow-interaction" type="b">
       <default>false</default>
       <summary>Allow Interaction</summary>

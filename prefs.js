@@ -151,6 +151,18 @@ export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
         interactionRow.add_suffix(interactionSwitch);
         group.add(interactionRow);
 
+        // Show Indicator
+        const indicatorRow = new Adw.ActionRow({
+            title: 'Show Menu Indicator',
+            subtitle: 'Show the gnomelet menu in the top bar',
+        });
+        const indicatorSwitch = new Gtk.Switch({
+            valign: Gtk.Align.CENTER,
+        });
+        settings.bind('show-indicator', indicatorSwitch, 'active', Gio.SettingsBindFlags.DEFAULT);
+        indicatorRow.add_suffix(indicatorSwitch);
+        group.add(indicatorRow);
+
         // Actions Group
         const actionsGroup = new Adw.PreferencesGroup({ title: 'Actions' });
         page.add(actionsGroup);
