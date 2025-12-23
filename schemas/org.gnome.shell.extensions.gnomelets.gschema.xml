@@ -3,12 +3,18 @@
   <schema id="org.gnome.shell.extensions.gnomelets" path="/org/gnome/shell/extensions/gnomelets/">
     <key name="floor-z-order" type="s">
       <choices>
-        <choice value="front"/>
-        <choice value="back"/>
+        <choice value="allow"/>
+        <choice value="partial"/>
+        <choice value="disallow"/>
       </choices>
-      <default>'front'</default>
+      <default>'allow'</default>
       <summary>In Front of Maximized</summary>
-      <description>If set to 'front', gnomelets on the floor stay on top of maximized windows. If 'back', they stay on the desktop layer behind windows.</description>
+      <description>
+        Mode: 
+        'allow' - Always in front (Overlay).
+        'partial' - Behind if the focused window is maximized.
+        'disallow' - Behind if any visible window is maximized.
+      </description>
     </key>
     <key name="gnomelet-type" type="as">
       <default>['Santa']</default>

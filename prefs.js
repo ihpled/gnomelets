@@ -106,16 +106,35 @@ export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
         group.add(scaleRow);
 
         // In Front of Maximized (mapped to floor-z-order)
-        const zOrderRow = new Adw.SwitchRow({
+        const zOrderRow = new Adw.ComboRow({
             title: 'In Front of Maximized',
-            subtitle: 'If disabled, gnomelets will be behind maximized windows',
+            subtitle: 'Choose behavior regarding maximized windows',
+            model: new Gtk.StringList({
+                strings: ['Allow (Overlay)', 'Partial (Behind Focused)', 'Disallow (Behind Any)'],
+            }),
         });
 
-        // Manual binding to map boolean switch to string values
-        zOrderRow.active = (settings.get_string('floor-z-order') === 'front');
+        // Map config strings to index
+        const orderMap = {
+            'allow': 0,
+            'partial': 1,
+            'disallow': 2
+        };
+        const indexMap = ['allow', 'partial', 'disallow'];
 
-        zOrderRow.connect('notify::active', () => {
-            settings.set_string('floor-z-order', zOrderRow.active ? 'front' : 'back');
+        // Set initial selection
+        let currentOrder = settings.get_string('floor-z-order');
+        if (orderMap.hasOwnProperty(currentOrder)) {
+            zOrderRow.set_selected(orderMap[currentOrder]);
+        } else {
+            zOrderRow.set_selected(0); // Default allow
+        }
+
+        zOrderRow.connect('notify::selected', () => {
+            let idx = zOrderRow.selected;
+            if (idx >= 0 && idx < indexMap.length) {
+                settings.set_string('floor-z-order', indexMap[idx]);
+            }
         });
 
         group.add(zOrderRow);

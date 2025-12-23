@@ -3,6 +3,7 @@ import GObject from 'gi://GObject';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
 import GdkPixbuf from 'gi://GdkPixbuf';
+import Meta from 'gi://Meta'; // Import Meta to check window types
 
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -282,17 +283,20 @@ const Gnomelet = GObject.registerClass(
                 global.window_group.set_child_above_sibling(this.actor, landedOnWindow.actor);
 
             } else if (onGround && !landedOnWindow) {
-                // If on the floor, follow user settings (Front/Overlay or Back/Desktop)
+                // If on the floor, follow user settings (Allow/Partial/Disallow)
                 let floorMode = this._settings.get_string('floor-z-order');
                 let parent = this.actor.get_parent();
 
-                if (floorMode === 'front') {
+                let shouldBeInFront = (floorMode === 'allow');
+
+                if (shouldBeInFront) {
                     if (parent !== Main.layoutManager.uiGroup) {
                         if (parent) parent.remove_child(this.actor);
                         Main.layoutManager.addChrome(this.actor);
                     }
                 } else {
-                    // Desktop mode: behind windows but above wallpaper
+                    // For 'partial' or 'disallow', if we are on the floor, we are likely behind windows.
+                    // We prefer Background Group.
                     let bgGroup = Main.layoutManager._backgroundGroup;
                     if (bgGroup && parent !== bgGroup) {
                         if (parent === Main.layoutManager.uiGroup) {
@@ -396,18 +400,31 @@ const Gnomelet = GObject.registerClass(
         }
 
         /**
-         * Sets the initial layer for the actor based on whether a maximized window is focused
-         * and the floor z-order setting.
+         * Sets the initial layer for the actor based on the floor z-order setting.
          */
         _resetLayer() {
-            let focusWindow = global.display.focus_window;
-            let maximized = isWindowMaximized(focusWindow);
             let floorMode = this._settings.get_string('floor-z-order');
+            let spawnInBackground = false;
 
-            // Logic: If maximized window is focused AND user wants "Back" behavior,
-            // spawn in background immediately to hide falling behind the maximized window.
-            // Otherwise, we spawn them in Chrome (Overlay) so they are visible falling.
-            let spawnInBackground = maximized && (floorMode === 'back');
+            if (floorMode === 'allow') {
+                spawnInBackground = false;
+            } else if (floorMode === 'partial') {
+                // Partial: Background only if focused window is maximized
+                let focusWindow = global.display.focus_window;
+                spawnInBackground = focusWindow && isWindowMaximized(focusWindow);
+            } else if (floorMode === 'disallow') {
+                // Disallow: Background if ANY visible window is maximized
+                let actors = global.window_group.get_children();
+                for (let actor of actors) {
+                    // Important: Check for NORMAL window type to avoid detecting desktop icons/docks as maximized
+                    if (actor.visible && actor.meta_window && !actor.meta_window.minimized &&
+                        actor.meta_window.get_window_type() === Meta.WindowType.NORMAL &&
+                        isWindowMaximized(actor.meta_window)) {
+                        spawnInBackground = true;
+                        break;
+                    }
+                }
+            }
 
             let parent = this.actor.get_parent();
 
@@ -928,36 +945,50 @@ class GnomeletManager {
             let focusWindow = global.display.focus_window;
             let floorMode = this._settings.get_string('floor-z-order');
 
-            // 1. Find the index of the highest maximized window in the Z-order (topmost).
-            // Windows in 'actors' are ordered from bottom to top.
+            // 1. Find indices of maximized windows.
+            // highestMaximizedIndex = topmost (last in list) maximized window.
+            // lowestMaximizedIndex = bottommost (first in list) maximized window.
             let highestMaximizedIndex = -1;
+            let lowestMaximizedIndex = -1;
+
             for (let i = 0; i < actors.length; i++) {
                 let actor = actors[i];
-                if (actor.visible && actor.meta_window && !actor.meta_window.minimized && isWindowMaximized(actor.meta_window)) {
-                    // Check specific exclusion for focused window in 'back' mode
-                    if (floorMode === 'back' && actor.meta_window === focusWindow) {
-                        continue;
+                if (actor.visible && actor.meta_window && !actor.meta_window.minimized &&
+                    actor.meta_window.get_window_type() === Meta.WindowType.NORMAL &&
+                    isWindowMaximized(actor.meta_window)) {
+
+                    // Logic for Disallow: Track the absolute lowest (first found) maximized window
+                    if (lowestMaximizedIndex === -1) {
+                        lowestMaximizedIndex = i;
                     }
-                    highestMaximizedIndex = i;
+
+                    // Logic for Partial: Track highest, but respect focus exclusion
+                    if (floorMode === 'partial' && actor.meta_window === focusWindow) {
+                        // Skip updating highest if it's the focused window in partial mode
+                    } else {
+                        highestMaximizedIndex = i;
+                    }
                 }
             }
 
             // 2. Collect valid windows for landing.
-            // They must have a Z-order higher than the highest maximized window (if any).
             for (let i = 0; i < actors.length; i++) {
-                // Skip if the index is lower than or equal to the maximized window "level"
-                if (highestMaximizedIndex > -1 && i <= highestMaximizedIndex) continue;
-
                 let actor = actors[i];
                 if (!actor.visible || !actor.meta_window) continue;
 
                 // Skip if the window itself is minimized or maximized.
-                // Note: We include the focused maximized window logic here. If mode is 'back',
-                // it is technically "seen", but the gnomelet (being in 'backgroundGroup') walks underneath it (invisible)
-                // or lands on "intermediate" windows.
-                // However, for logical consistency, the focused maximized window itself should not be walkable
-                // if we are behind it (since we are in the 'Desktop' or 'Background' layer).
                 if (actor.meta_window.minimized || isWindowMaximized(actor.meta_window)) continue;
+
+                if (floorMode === 'disallow') {
+                    // Disallow: Only land on windows BEHIND the lowest maximized window.
+                    // If a maximized window exists, ignore everything at or above its level.
+                    // Important: We only apply this filter if a valid maximized window was found (lowest > -1)
+                    if (lowestMaximizedIndex > -1 && i >= lowestMaximizedIndex) continue;
+                } else {
+                    // Allow/Partial: Only land on windows IN FRONT OF the highest relevant maximized window.
+                    // If index is lower than highest max window, we skip it (it's obscured).
+                    if (highestMaximizedIndex > -1 && i <= highestMaximizedIndex) continue;
+                }
 
                 let rect = actor.meta_window.get_frame_rect();
                 this._windows.push({ rect, actor });
