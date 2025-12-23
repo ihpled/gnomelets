@@ -20,6 +20,7 @@ You can now select Santa as your desktop companion to bring some festive cheer t
 *   **Multi-Monitor Support**: They can travel and spawn across all your connected screens.
 *   **Smart AI Behavior**: Gnomelets employ intelligent jumping mechanics, detecting edges to perform daring leaps and predicting reachable windows to climb upwards dynamically.
 *   **Top Bar Controls**: A convenient menu in the top bar lets you instantly re-spawn all gnomelets or toggle their visibility on/off without opening settings.
+*   **Interactive Drag & Drop**: Pick up gnomelets with your mouse and move them around! Enable interaction in settings to drag them to new locations.
 
 ## Configuration
 
@@ -28,7 +29,8 @@ You can customize your experience via the extension settings:
 *   **Character Selection**: Select one or more characters (e.g., Kitten, Santa Claus, etc.) from the list. If multiple are selected, they will appear randomly! The list automatically updates with any new folders found in the `images` directory.
 *   **Population Control**: Decide how many gnomelets you want roaming your screen at once.
 *   **Scale**: Adjust the size of the characters to fit your screen resolution or preference.
-*   **Z-Order**: Choose whether gnomelets walk in front of your windows or behind them on the desktop floor.
+*   **In Front of Maximized**: Choose whether gnomelets walk in front of your windows or behind them. Use **Partial** or **Disallow** for a "distraction-free" experience: Partial intelligently hides gnomelets only when a maximized window is focused, while Disallow keeps them hidden behind maximized windows.
+*   **Allow Interaction**: Now you can enable/disable the ability to drag and drop gnomelets with your mouse!
 
 ## Adding Custom Characters
 
