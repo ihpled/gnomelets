@@ -139,6 +139,18 @@ export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
 
         group.add(zOrderRow);
 
+        // Allow Interaction
+        const interactionRow = new Adw.ActionRow({
+            title: 'Allow Interaction',
+            subtitle: 'Enable dragging gnomelets with the mouse',
+        });
+        const interactionSwitch = new Gtk.Switch({
+            valign: Gtk.Align.CENTER,
+        });
+        settings.bind('allow-interaction', interactionSwitch, 'active', Gio.SettingsBindFlags.DEFAULT);
+        interactionRow.add_suffix(interactionSwitch);
+        group.add(interactionRow);
+
         // Actions Group
         const actionsGroup = new Adw.PreferencesGroup({ title: 'Actions' });
         page.add(actionsGroup);

@@ -4,11 +4,14 @@ import St from 'gi://St';
 import Gio from 'gi://Gio';
 import GdkPixbuf from 'gi://GdkPixbuf';
 import Meta from 'gi://Meta'; // Import Meta to check window types
+import Shell from 'gi://Shell';
+import Clutter from 'gi://Clutter';
 
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 
 // --- Configuration Constants ---
 const UPDATE_INTERVAL_MS = 50; // Update loop runs every 50ms (~20 FPS)
@@ -23,7 +26,8 @@ const State = {
     FALLING: 'FALLING',
     WALKING: 'WALKING',
     IDLE: 'IDLE',
-    JUMPING: 'JUMPING'
+    JUMPING: 'JUMPING',
+    DRAGGING: 'DRAGGING'
 };
 
 /**
@@ -89,10 +93,13 @@ const Gnomelet = GObject.registerClass(
                 this.actor.set_gicon(this._frameImages[0]);
             }
 
+            this.actor._delegate = this; // Fix for DND source identification
+
             // Set initial layer based on context (Fix for maximized window visibility)
             this._resetLayer();
             this.actor.set_position(this._x, this._y);
 
+            this._updateInteraction();
             this._updateAnimation();
         }
 
@@ -103,6 +110,11 @@ const Gnomelet = GObject.registerClass(
                 this._savedFacing = (sign > 0);
             }
             return this._savedFacing;
+        }
+
+        // Mock 'app' property to prevent crashes with gtk4-ding
+        get app() {
+            return null;
         }
 
         /**
@@ -123,6 +135,100 @@ const Gnomelet = GObject.registerClass(
             // Adjust Y position so feet stay at the same ground level
             this._y = this._y + oldH - this._displayH;
             this.actor.set_position(this._x, this._y);
+        }
+
+        /**
+         * Updates the interaction mode (dragging) based on settings.
+         */
+        _updateInteraction() {
+            let allowInteraction = this._settings.get_boolean('allow-interaction');
+
+            // If allowed and not yet draggable, make it draggable
+            if (allowInteraction) {
+                if (!this._draggable) {
+                    this.actor.reactive = true;
+                    this._draggable = DND.makeDraggable(this.actor);
+                    this._dragBeginId = this._draggable.connect('drag-begin', this._onDragBegin.bind(this));
+                    this._dragEndId = this._draggable.connect('drag-end', this._onDragEnd.bind(this));
+                    this._dragCancelledId = this._draggable.connect('drag-cancelled', () => console.log('[gnomelets] Drag cancelled'));
+                }
+            } else {
+                // To disable, we make the actor non-reactive.
+                // We don't remove the draggable instance as it's bound to the actor,
+                // but reactivity controls the mouse events.
+                this.actor.reactive = false;
+            }
+        }
+
+        _onDragBegin() {
+            this._state = State.DRAGGING;
+            this._vx = 0;
+            this._vy = 0;
+            this._updateAnimation();
+
+            // Create a full-screen transparent overlay to capture the drop event
+            // This prevents the shell crash caused by unhiding the source actor from pick
+            this._dragOverlay = new Clutter.Actor({
+                width: global.stage.width,
+                height: global.stage.height,
+                reactive: true
+            });
+            this._dragOverlay._delegate = this; // Route drag events to this Gnomelet instance
+            Main.layoutManager.uiGroup.add_child(this._dragOverlay);
+        }
+
+        handleDragOver(source, actor, x, y, time) {
+            // We accept drag over from ourselves (or potentially others if we wanted)
+            return DND.DragMotionResult.MOVE_DROP;
+        }
+
+        acceptDrop(source, actor, x, y, time) {
+            // Update internal coordinates
+            this._x = actor.x;
+            this._y = actor.y;
+
+            // CRITICAL: Reparent to window_group to save it from dnd.js auto-destruction.
+            // dnd.js attempts to destroy the drag actor if it is found in Main.uiGroup after a successful drop.
+            // We temporarily move it to window_group to bypass that check.
+            let parent = this.actor.get_parent();
+            if (parent === Main.layoutManager.uiGroup) {
+                Main.layoutManager.removeChrome(this.actor);
+            } else if (parent) {
+                parent.remove_child(this.actor);
+            }
+            global.window_group.add_child(this.actor);
+
+            this.actor.set_position(this._x, this._y);
+
+            return true;
+        }
+
+        _onDragEnd() {
+            if (this._dragOverlay) {
+                this._dragOverlay.destroy();
+                this._dragOverlay = null;
+            }
+
+            // Update internal coordinates to match where the actor ended up
+            this._x = this.actor.x;
+            this._y = this.actor.y;
+
+            // Reset visual transforms that might be corrupted by external DND logic
+            this.actor.rotation_angle_z = 0;
+            this.actor.scale_y = 1;
+            this.actor.opacity = 255;
+
+            // Re-apply correct facing (scale_x)
+            this.actor.set_pivot_point(0.5, 0.5);
+            this.actor.scale_x = this.facingRight ? 1 : -1;
+
+            this._state = State.FALLING;
+            this._vx = 0;
+            this._vy = 0;
+
+            // Now that the drag flow is complete and dnd.js is satisfied, 
+            // put the actor back in the correct layer (which might be uiGroup).
+            this._resetLayer();
         }
 
         /**
@@ -177,6 +283,7 @@ const Gnomelet = GObject.registerClass(
          */
         update(windows) {
             if (!this.actor) return; // Guard against updates after destruction
+            if (this._state === State.DRAGGING) return; // Suspended physics while dragging
 
             // Physics (Gravity)
             if (this._state === State.FALLING || this._state === State.JUMPING) {
@@ -528,6 +635,7 @@ const Gnomelet = GObject.registerClass(
                     break;
                 case State.JUMPING:
                 case State.FALLING:
+                case State.DRAGGING:
                     frameIndex = 5;
                     break;
             }
@@ -758,6 +866,8 @@ class GnomeletManager {
                 this._hardReset();
             } else if (key === 'is-enabled') {
                 this._updateEnabledState();
+            } else if (key === 'allow-interaction') {
+                this._updateInteractions();
             }
         });
 
@@ -996,6 +1106,12 @@ class GnomeletManager {
 
             for (let p of this._gnomelets) p.update(this._windows);
         } catch (e) { }
+    }
+
+    _updateInteractions() {
+        for (let p of this._gnomelets) {
+            p._updateInteraction();
+        }
     }
 
     /**
