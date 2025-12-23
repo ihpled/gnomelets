@@ -61,7 +61,7 @@ export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
                         valign: Gtk.Align.CENTER,
                     });
 
-                    check.connect('toggled', () => {
+                    check.connectObject('toggled', () => {
                         let current = new Set(settings.get_strv('gnomelet-type'));
                         if (check.active) {
                             current.add(type);
@@ -69,7 +69,7 @@ export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
                             current.delete(type);
                         }
                         settings.set_strv('gnomelet-type', [...current]);
-                    });
+                    }, window);
 
                     row.add_suffix(check);
                     charExpander.add_row(row);
@@ -130,12 +130,12 @@ export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
             zOrderRow.set_selected(0); // Default allow
         }
 
-        zOrderRow.connect('notify::selected', () => {
+        zOrderRow.connectObject('notify::selected', () => {
             let idx = zOrderRow.selected;
             if (idx >= 0 && idx < indexMap.length) {
                 settings.set_string('floor-z-order', indexMap[idx]);
             }
-        });
+        }, window);
 
         group.add(zOrderRow);
 
@@ -161,11 +161,11 @@ export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
             valign: Gtk.Align.CENTER,
         });
 
-        respawnButton.connect('clicked', () => {
+        respawnButton.connectObject('clicked', () => {
             // Toggle the boolean value to trigger a change signal
             let current = settings.get_boolean('reset-trigger');
             settings.set_boolean('reset-trigger', !current);
-        });
+        }, window);
 
         respawnRow.add_suffix(respawnButton);
         actionsGroup.add(respawnRow);
