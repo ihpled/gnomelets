@@ -3,6 +3,7 @@ import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import GdkPixbuf from 'gi://GdkPixbuf';
 import Meta from 'gi://Meta';
+import St from 'gi://St';
 
 import { Gnomelet } from './gnomelet.js';
 import { isWindowMaximized, UPDATE_INTERVAL_MS } from './utils.js';
@@ -185,6 +186,13 @@ export const GnomeletManager = GObject.registerClass(
             this._cancellable = new Gio.Cancellable();
             this._settings.connectObject('changed', this._onSettingsChanged.bind(this), this);
 
+            // Monitor system scale changes
+            let themeContext = St.ThemeContext.get_for_stage(global.stage);
+            if (themeContext) {
+                themeContext.connectObject('notify::scale-factor',
+                    () => this._updateScale(), this);
+            }
+
             // Async load: Start loading state asynchronously.
             // The gnomelets will spawn in the callback.
             this._loadStateAsync();
@@ -217,6 +225,11 @@ export const GnomeletManager = GObject.registerClass(
             if (this._cancellable) {
                 this._cancellable.cancel();
                 this._cancellable = null;
+            }
+
+            let themeContext = St.ThemeContext.get_for_stage(global.stage);
+            if (themeContext) {
+                themeContext.disconnectObject(this);
             }
 
             this._saveState();

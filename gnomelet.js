@@ -44,17 +44,14 @@ export const Gnomelet = GObject.registerClass(
             this._frameWidth = frameWidth;
             this._frameHeight = frameHeight;
 
-            const TARGET_HEIGHT = this._settings.get_int('gnomelet-scale');
-            const scaleFactor = TARGET_HEIGHT / this._frameHeight;
-
-            // displayW/H are used for physics and collision logic
-            this._displayW = Math.floor(this._frameWidth * scaleFactor);
-            this._displayH = Math.floor(TARGET_HEIGHT);
-
-            this._randomizeStartPos();
-
             // --- Image Resources ---
             this._frameImages = frameImages;
+
+            // --- Dimensions and Scale ---
+            // Calculate initial dimensions accounting for interface scale
+            let iconSize = this._updateDimensions();
+
+            this._randomizeStartPos();
 
             // --- Actor Setup (St.Icon) ---
             // NOTE: St.Icon handles scaling better when using only icon_size.
@@ -62,8 +59,8 @@ export const Gnomelet = GObject.registerClass(
             this.actor = new St.Icon({
                 visible: true,
                 reactive: false,
-                icon_size: this._displayH,
-                style: 'padding: 0px;',
+                icon_size: iconSize,
+                style: 'padding: 0px; object-fit: fill;',
             });
 
             // Set initial frame content
@@ -96,19 +93,39 @@ export const Gnomelet = GObject.registerClass(
         }
 
         /**
-         * Updates the gnomelet scale when settings change.
+         * Calculates dimensions based on settings and interface scale.
+         * Returns the icon_size parameter to be used for St.Icon.
+         */
+        _updateDimensions() {
+            const settingsScale = this._settings.get_int('gnomelet-scale');
+            const themeContext = St.ThemeContext.get_for_stage(global.stage);
+            const interfaceScale = themeContext ? themeContext.scale_factor : 1;
+
+            // St.Icon applies the interface scale to the rendered size.
+            // To ensure the visual size matches our expected logical size (settingsScale),
+            // we must divide by the interface scale.
+            let iconSizeParam = Math.floor(settingsScale / interfaceScale);
+            if (iconSizeParam < 1) iconSizeParam = 1;
+
+            // The actual visual height will be iconSizeParam * interfaceScale
+            this._displayH = iconSizeParam * interfaceScale;
+
+            // Update width based on aspect ratio
+            this._displayW = Math.floor(this._displayH * (this._frameWidth / this._frameHeight));
+
+            return iconSizeParam;
+        }
+
+        /**
+         * Updates the gnomelet scale when settings change or interface scale changes.
          */
         updateScale() {
             let oldH = this._displayH;
 
-            const TARGET_HEIGHT = this._settings.get_int('gnomelet-scale');
-            const scaleFactor = TARGET_HEIGHT / this._frameHeight;
-
-            this._displayW = Math.floor(this._frameWidth * scaleFactor);
-            this._displayH = Math.floor(TARGET_HEIGHT);
+            let iconSize = this._updateDimensions();
 
             // Update the visual size of the icon
-            this.actor.set_icon_size(this._displayH);
+            this.actor.set_icon_size(iconSize);
 
             // Adjust Y position so feet stay at the same ground level
             this._y = this._y + oldH - this._displayH;
@@ -334,7 +351,7 @@ export const Gnomelet = GObject.registerClass(
                     let inVerticalRange = (feetY >= rect.y) && (prevFeetY <= rect.y + 25);
 
                     if (inHorizontalRange && inVerticalRange) {
-                        this._y = rect.y - this._displayH + 1;
+                        this._y = rect.y - this._displayH;
                         this._vy = 0;
                         onGround = true;
                         landedOnWindow = win;
