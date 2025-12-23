@@ -4,7 +4,7 @@
 UUID="gnomelets@mcast.gnomext.com"
 INSTALL_DIR="$HOME/.local/share/gnome-shell/extensions/$UUID"
 SOURCE_DIR=$(pwd)
-FILES_TO_INSTALL="extension.js prefs.js metadata.json schemas images"
+FILES_TO_INSTALL="extension.js prefs.js metadata.json schemas images manager.js gnomelet.js indicator.js utils.js"
 ZIP_MODE=false
 
 # Check for --zip argument

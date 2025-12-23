@@ -16,6 +16,10 @@ zip -r "$ZIP_NAME" extension.js \
     schemas/org.gnome.shell.extensions.gnomelets.gschema.xml \
     README.md \
     images/ \
+    manager.js \
+    gnomelet.js \
+    indicator.js \
+    utils.js
     
 
 echo "Created $ZIP_NAME"
