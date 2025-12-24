@@ -484,6 +484,7 @@ export const GnomeletManager = GObject.registerClass(
                 // Dash-to-Dock places its main container (DashToDock) in uiGroup.
                 // We identify it by its constructor name.
                 let uiChildren = Main.layoutManager.uiGroup.get_children();
+                searchLoop:
                 for (let child of uiChildren) {
                     if (child.visible && child.mapped && child.constructor && child.constructor.name === 'DashToDock') {
                         let dashToDock = child;
@@ -499,8 +500,12 @@ export const GnomeletManager = GObject.registerClass(
                                     let rect = { x: Math.floor(x), y: Math.floor(y), width: Math.floor(w), height: Math.floor(h) };
                                     this._windows.push({ rect, actor: child });
                                 }
+                                // Found it, no need to search further
+                                break searchLoop;
                             }
                         }
+                        // Found it, no need to search further
+                        break;
                     }
                 }
 
