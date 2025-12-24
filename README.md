@@ -2,7 +2,12 @@
 
 Brighten up your GNOME desktop with **Gnomelets**! This extension brings small, animated 2D characters to life, letting them roam freely across your screen. They walk, jump, and even balance on top of your open windows.
 
+
 Watch as they fall from the top of the screen, land on your active windows, and explore your desktop environment with charming pixel-art animations.
+
+<div align="center">
+  <video src="Gnomelets.mp4" width="100%" controls autoplay loop muted></video>
+</div>
 
 ## 🎄 Christmas Special Edition 🎄
 
