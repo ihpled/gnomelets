@@ -5,9 +5,7 @@ Brighten up your GNOME desktop with **Gnomelets**! This extension brings small, 
 
 Watch as they fall from the top of the screen, land on your active windows, and explore your desktop environment with charming pixel-art animations.
 
-<div align="center">
-  <video src="Gnomelets.mp4" width="100%" controls autoplay loop muted></video>
-</div>
+https://github.com/user-attachments/assets/2a6e47ec-c063-4d65-87ba-e7559144d641
 
 ## 🎄 Christmas Special Edition 🎄
 
