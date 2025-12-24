@@ -1,7 +1,7 @@
 const GdkPixbuf = imports.gi.GdkPixbuf;
 const GLib = imports.gi.GLib;
 
-let files = ['images/mouse.png', 'images/santa.png'];
+let files = ['src/images/mouse.png', 'src/images/santa.png'];
 let dir = GLib.get_current_dir();
 
 files.forEach(fname => {

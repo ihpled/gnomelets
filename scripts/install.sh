@@ -3,7 +3,10 @@
 # Configuration
 UUID="gnomelets@mcast.gnomext.com"
 INSTALL_DIR="$HOME/.local/share/gnome-shell/extensions/$UUID"
-SOURCE_DIR=$(pwd)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+SRC_DIR="$PROJECT_ROOT/src"
+
 FILES_TO_INSTALL="extension.js prefs.js metadata.json schemas images manager.js gnomelet.js indicator.js utils.js"
 ZIP_MODE=false
 
@@ -12,16 +15,19 @@ if [[ "$1" == "--zip" ]]; then
     ZIP_MODE=true
 fi
 
-echo "🚧 Building and Installing Gnomelets Extension..." // turbo
+echo "🚧 Building and Installing Gnomelets Extension..."
 
 # 1. Compile Schemas
 echo "⚙️ Compiling schemas..."
-glib-compile-schemas schemas/
+glib-compile-schemas "$SRC_DIR/schemas/"
+
+# Move to source directory to simplify file operations
+cd "$SRC_DIR" || exit
 
 if [ "$ZIP_MODE" = true ]; then
     # Create temp directory
-    mkdir -p temp
-    ZIP_FILE="temp/${UUID}.zip"
+    mkdir -p "$PROJECT_ROOT/temp"
+    ZIP_FILE="$PROJECT_ROOT/temp/${UUID}.zip"
 
     # Create zip archive
     echo "🤐 Creating zip package: $ZIP_FILE"

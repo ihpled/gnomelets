@@ -72,11 +72,12 @@ def split_sprites(input_directory, output_directory):
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
     
-    # Input: ./temp/images
-    input_dir = os.path.join(script_dir, "temp", "images")
+    # Input: ./temp/images (relative to project root)
+    input_dir = os.path.join(project_root, "temp", "images")
     
-    # Output: ./images
-    output_dir = os.path.join(script_dir, "images")
+    # Output: ./src/images (relative to project root)
+    output_dir = os.path.join(project_root, "src", "images")
     
     split_sprites(input_dir, output_dir)
