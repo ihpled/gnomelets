@@ -21,6 +21,7 @@ You can now select Santa as your desktop companion to bring some festive cheer t
 *   **Smart AI Behavior**: Gnomelets employ intelligent jumping mechanics, detecting edges to perform daring leaps and predicting reachable windows to climb upwards dynamically.
 *   **Top Bar Controls**: A convenient menu in the top bar lets you instantly re-spawn all gnomelets or toggle their visibility on/off without opening settings.
 *   **Interactive Drag & Drop**: Pick up gnomelets with your mouse and move them around! Enable interaction in settings to drag them to new locations.
+*   **Dash to Dock Support**: Gnomelets can now recognize, land on, and explore the Dash to Dock if it is present on your screen!
 
 ## Configuration
 
