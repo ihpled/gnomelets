@@ -498,8 +498,12 @@ export const Gnomelet = GObject.registerClass(
                         // Window top (rect.y) must be less than feet (currFeetY)
                         let dist = currFeetY - rect.y;
                         if (dist > 0 && dist <= MAX_JUMP_HEIGHT) {
-                            canJump = true;
-                            break;
+                            // Only jump if we can actually fit on top of the target window 
+                            // without being blocked by the screen top (ceiling)
+                            if (rect.y - this._displayH >= currentMonitor.y) {
+                                canJump = true;
+                                break;
+                            }
                         }
                     }
                 }
