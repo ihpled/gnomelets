@@ -24,7 +24,7 @@ You can now select Santa as your desktop companion to bring some festive cheer t
 *   **Smart AI Behavior**: Gnomelets employ intelligent jumping mechanics, detecting edges to perform daring leaps and predicting reachable windows to climb upwards dynamically.
 *   **Top Bar Controls**: A convenient menu in the top bar lets you instantly re-spawn all gnomelets or toggle their visibility on/off without opening settings.
 *   **Interactive Drag & Drop**: Pick up gnomelets with your mouse and move them around! Enable interaction in settings to drag them to new locations.
-*   **Dash to Dock & Dash to Panel Support**: Gnomelets can now recognize, land on, and explore both Dash to Dock and Dash to Panel if they are present on your screen!
+*   **Dash to Dock (Ubuntu Dock) & Dash to Panel Support**: Gnomelets can now recognize, land on, and explore both Dash to Dock (Ubuntu Dock) and Dash to Panel if they are present on your screen!
 
 ## Configuration
 
@@ -34,7 +34,7 @@ You can customize your experience via the extension settings:
 *   **Population Control**: Decide how many gnomelets you want roaming your screen at once.
 *   **Scale**: Adjust the size of the characters to fit your screen resolution or preference.
 *   **In Front of Maximized**: Choose whether gnomelets walk in front of your windows or behind them. Use **Partial** or **Disallow** for a "distraction-free" experience: Partial intelligently hides gnomelets only when a maximized window is focused, while Disallow keeps them hidden behind maximized windows.
-*   **Dock Support**: Explicitly select "Dash to Dock", "Dash to Panel", or "None" to optimize interaction.
+*   **Dock Support**: Explicitly select "Dash to Dock (Ubuntu Dock)", "Dash to Panel", or "None" to optimize interaction.
 *   **Allow Interaction**: Now you can enable/disable the ability to drag and drop gnomelets with your mouse!
 
 ## Adding Custom Characters

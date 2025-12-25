@@ -142,7 +142,7 @@ export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
         // In Front of Dock (mapped to dock-z-order)
         const dockZOrderRow = new Adw.ActionRow({
             title: 'In Front of Dock',
-            subtitle: 'If enabled, gnomelets appear in front of the dock of "Dash to Dock" or Panel of "Dash to Panel"',
+            subtitle: 'If enabled, gnomelets appear in front of "Dash to Dock (Ubuntu Dock)" or "Dash to Panel"',
         });
         const dockZOrderSwitch = new Gtk.Switch({
             valign: Gtk.Align.CENTER,
