@@ -399,23 +399,21 @@ export const GnomeletManager = GObject.registerClass(
                 if (!child.visible && !child.mapped) continue;
 
                 // --- 1. Dash to Dock Support ---
-                if (child.constructor && child.constructor.name === 'DashToDock') {
+                if (child.constructor?.name === 'DashToDock') {
                     dockContainer = child;
                     if (allowDock) {
-                        for (let subChild of child.get_children()) {
-                            // DashSlideContainer is the main non-transparent container for the dock
-                            if (subChild.constructor && subChild.constructor.name === 'DashSlideContainer') {
-                                let [x, y] = subChild.get_transformed_position();
-                                let [w, h] = subChild.get_transformed_size();
-                                if (w > 0 && h > 0) {
-                                    let rect = {
-                                        x: Math.floor(x),
-                                        y: Math.floor(y),
-                                        width: Math.floor(w),
-                                        height: Math.floor(h)
-                                    };
-                                    dockWindows.push({ rect, actor: subChild, isDock: true });
-                                }
+                        // DashSlideContainer is the main non-transparent container for the dock
+                        if (child.last_child?.constructor?.name === 'DashSlideContainer') {
+                            let [x, y] = child.last_child.get_transformed_position();
+                            let [w, h] = child.last_child.get_transformed_size();
+                            if (w > 0 && h > 0) {
+                                let rect = {
+                                    x: Math.floor(x),
+                                    y: Math.floor(y),
+                                    width: Math.floor(w),
+                                    height: Math.floor(h)
+                                };
+                                dockWindows.push({ rect, actor: child.last_child, isDock: true });
                             }
                         }
                     }
@@ -424,21 +422,6 @@ export const GnomeletManager = GObject.registerClass(
                 }
 
                 // --- 2. Dash to Panel Support ---
-                // Heuristic based on User Request:
-                // child?.first_child?.first_child?.style_class?.startsWith('dashtopanelPanel')
-                // let isDashToPanel = false;
-                // let panelActor = null;
-                // try {
-                //     let l1 = child.first_child;
-                //     if (l1) {
-                //         let l2 = l1.first_child;
-                //         if (l2 && l2.style_class && l2.style_class.startsWith('dashtopanelPanel')) {
-                //             isDashToPanel = true;
-                //             panelActor = l2;
-                //         }
-                //     }
-                // } catch (e) { }
-
                 let isDashToPanel = child.first_child?.first_child?.style_class?.startsWith('dashtopanelPanel');
 
                 if (isDashToPanel) {

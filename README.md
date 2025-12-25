@@ -24,7 +24,7 @@ You can now select Santa as your desktop companion to bring some festive cheer t
 *   **Smart AI Behavior**: Gnomelets employ intelligent jumping mechanics, detecting edges to perform daring leaps and predicting reachable windows to climb upwards dynamically.
 *   **Top Bar Controls**: A convenient menu in the top bar lets you instantly re-spawn all gnomelets or toggle their visibility on/off without opening settings.
 *   **Interactive Drag & Drop**: Pick up gnomelets with your mouse and move them around! Enable interaction in settings to drag them to new locations.
-*   **Dash to Dock Support**: Gnomelets can now recognize, land on, and explore the Dash to Dock if it is present on your screen!
+*   **Dash to Dock & Dash to Panel Support**: Gnomelets can now recognize, land on, and explore both Dash to Dock and Dash to Panel if they are present on your screen!
 
 ## Configuration
 
@@ -42,10 +42,11 @@ Want to add your own character? It's easy!
 
 1.  Navigate to the extension's `images` folder (usually in `~/.local/share/gnome-shell/extensions/gnomelets@.../images`).
 2.  Create a new folder with your character's name (e.g., `Robot`).
-3.  Add 6 PNG image files named `0.png` through `5.png` inside that folder.
+3.  Add the PNG animation frames inside that folder:
     *   **0.png - 3.png**: Walking animation frames.
     *   **4.png**: Idle frame.
     *   **5.png**: Jumping/Falling frame.
+    *   **6.png - 7.png**: (Optional) Dragging animation frames. If missing, frames `1.png` and `3.png` are used.
 4.  Reload the extension or restart GNOME Shell. Your new character will appear in the settings dropdown!
 
 ## Installation
