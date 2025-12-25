@@ -145,7 +145,6 @@ export const Gnomelet = GObject.registerClass(
                     this._draggable = DND.makeDraggable(this.actor);
                     this._dragBeginId = this._draggable.connect('drag-begin', this._onDragBegin.bind(this));
                     this._dragEndId = this._draggable.connect('drag-end', this._onDragEnd.bind(this));
-                    this._dragCancelledId = this._draggable.connect('drag-cancelled', () => console.log('[gnomelets] Drag cancelled'));
                 }
             } else {
                 // To disable, we make the actor non-reactive.
@@ -278,7 +277,10 @@ export const Gnomelet = GObject.registerClass(
          */
         update(windows, forceBackground, dockContainer) {
             if (!this.actor) return; // Guard against updates after destruction
-            if (this._state === State.DRAGGING) return; // Suspended physics while dragging
+            if (this._state === State.DRAGGING) {
+                this._updateAnimation();
+                return;
+            }
 
             // Physics (Gravity)
             if (this._state === State.FALLING || this._state === State.JUMPING) {
@@ -662,8 +664,17 @@ export const Gnomelet = GObject.registerClass(
                     break;
                 case State.JUMPING:
                 case State.FALLING:
-                case State.DRAGGING:
                     frameIndex = 5;
+                    break;
+                case State.DRAGGING:
+                    // Cycle between two walking frames
+                    let dragFrames = [1, 3];
+                    if (this._frameImages[6] && this._frameImages[7]) {
+                        dragFrames = [6, 7];
+                    }
+                    let dragSpeed = 8;
+                    let dIdx = Math.floor(this._animationTimer / dragSpeed) % dragFrames.length;
+                    frameIndex = dragFrames[dIdx];
                     break;
             }
             this.setFrame(frameIndex);
@@ -698,7 +709,6 @@ export const Gnomelet = GObject.registerClass(
             if (this._draggable) {
                 if (this._dragBeginId) this._draggable.disconnect(this._dragBeginId);
                 if (this._dragEndId) this._draggable.disconnect(this._dragEndId);
-                if (this._dragCancelledId) this._draggable.disconnect(this._dragCancelledId);
                 this._draggable = null;
             }
 
