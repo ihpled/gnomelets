@@ -499,11 +499,8 @@ export const GnomeletManager = GObject.registerClass(
                 }
 
                 // New Option: In Front of Dash to Dock
-                // If false (disallow), we treat the dock as a forbidden landing surface
-                let dockZOrder = this._settings.get_boolean('dock-z-order');
-                if (!dockZOrder) {
-                    allowDock = false;
-                }
+                // We no longer prevent landing if dock-z-order is false.
+                // The z-order is handled purely in the gnomelet drawing logic.
 
                 // Dash-to-Dock places its main container (DashToDock) in uiGroup.
                 // We identify it by its constructor name.
