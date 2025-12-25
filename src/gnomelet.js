@@ -316,6 +316,12 @@ export const Gnomelet = GObject.registerClass(
 
             let floorY = currentMonitor.y + currentMonitor.height;
 
+            // Ceiling collision to prevent jumping off-screen and disappearing
+            if (this._y < currentMonitor.y) {
+                this._y = currentMonitor.y;
+                this._vy = 0;
+            }
+
             // --- Logic: Reposition if walking off floor ---
             let onFloorLevel = (this._y + this._displayH) >= floorY - 10;
 
