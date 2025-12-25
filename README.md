@@ -34,6 +34,7 @@ You can customize your experience via the extension settings:
 *   **Population Control**: Decide how many gnomelets you want roaming your screen at once.
 *   **Scale**: Adjust the size of the characters to fit your screen resolution or preference.
 *   **In Front of Maximized**: Choose whether gnomelets walk in front of your windows or behind them. Use **Partial** or **Disallow** for a "distraction-free" experience: Partial intelligently hides gnomelets only when a maximized window is focused, while Disallow keeps them hidden behind maximized windows.
+*   **Dock Support**: Explicitly select "Dash to Dock", "Dash to Panel", or "None" to optimize interaction.
 *   **Allow Interaction**: Now you can enable/disable the ability to drag and drop gnomelets with your mouse!
 
 ## Adding Custom Characters

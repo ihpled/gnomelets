@@ -24,6 +24,18 @@
         If false, they are drawn behind.
       </description>
     </key>
+    <key name="dock-support" type="s">
+      <choices>
+        <choice value="none"/>
+        <choice value="dash-to-dock"/>
+        <choice value="dash-to-panel"/>
+      </choices>
+      <default>'none'</default>
+      <summary>Dock Support</summary>
+      <description>
+        Which extension to support for dock interaction.
+      </description>
+    </key>
     <key name="gnomelet-type" type="as">
       <default>['Santa']</default>
       <summary>Gnomelet Characters</summary>

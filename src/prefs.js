@@ -151,6 +151,38 @@ export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
         dockZOrderRow.add_suffix(dockZOrderSwitch);
         group.add(dockZOrderRow);
 
+        // Dock Support
+        const dockSupportRow = new Adw.ComboRow({
+            title: 'Dock Support',
+            subtitle: 'Select explicit support for a dock extension',
+            model: new Gtk.StringList({
+                strings: ['None', 'Dash to Dock', 'Dash to Panel'],
+            }),
+        });
+
+        const dockSupportMap = ['none', 'dash-to-dock', 'dash-to-panel'];
+        const dockSupportInverseMap = {
+            'none': 0,
+            'dash-to-dock': 1,
+            'dash-to-panel': 2
+        };
+
+        let currentDockSupport = settings.get_string('dock-support');
+        if (dockSupportInverseMap.hasOwnProperty(currentDockSupport)) {
+            dockSupportRow.set_selected(dockSupportInverseMap[currentDockSupport]);
+        } else {
+            dockSupportRow.set_selected(0); // Default None
+        }
+
+        dockSupportRow.connect('notify::selected', () => {
+            let idx = dockSupportRow.selected;
+            if (idx >= 0 && idx < dockSupportMap.length) {
+                settings.set_string('dock-support', dockSupportMap[idx]);
+            }
+        });
+
+        group.add(dockSupportRow);
+
         // Allow Interaction
         const interactionRow = new Adw.ActionRow({
             title: 'Allow Interaction',

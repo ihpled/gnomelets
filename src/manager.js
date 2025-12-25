@@ -389,7 +389,9 @@ export const GnomeletManager = GObject.registerClass(
          * Scans for dock/panel identifiers to determine collision and z-ordering.
          * Supports Dash to Dock and Dash to Panel.
          */
-        _scanForDocks(allowDock) {
+        _scanForDocks(allowDock, dockSupportMode) {
+            if (dockSupportMode === 'none') return { dockContainer: null, dockWindows: [] };
+
             let dockContainer = null;
             let dockWindows = [];
 
@@ -399,7 +401,7 @@ export const GnomeletManager = GObject.registerClass(
                 if (!child.visible && !child.mapped) continue;
 
                 // --- 1. Dash to Dock Support ---
-                if (child.constructor?.name === 'DashToDock') {
+                if (dockSupportMode === 'dash-to-dock' && child.constructor?.name === 'DashToDock') {
                     dockContainer = child;
                     if (allowDock) {
                         // DashSlideContainer is the main non-transparent container for the dock
@@ -422,25 +424,27 @@ export const GnomeletManager = GObject.registerClass(
                 }
 
                 // --- 2. Dash to Panel Support ---
-                let isDashToPanel = child.first_child?.first_child?.style_class?.startsWith('dashtopanelPanel');
+                if (dockSupportMode === 'dash-to-panel') {
+                    let isDashToPanel = child.first_child?.first_child?.style_class?.startsWith('dashtopanelPanel');
 
-                if (isDashToPanel) {
-                    dockContainer = child; // The container in uiGroup is the reference for Z-Order
-                    let panelActor = child.first_child?.first_child;
-                    if (allowDock && panelActor) {
-                        let [x, y] = panelActor.get_transformed_position();
-                        let [w, h] = panelActor.get_transformed_size();
-                        if (w > 0 && h > 0) {
-                            let rect = {
-                                x: Math.floor(x),
-                                y: Math.floor(y),
-                                width: Math.floor(w),
-                                height: Math.floor(h)
-                            };
-                            dockWindows.push({ rect, actor: panelActor, isDock: true });
+                    if (isDashToPanel) {
+                        dockContainer = child; // The container in uiGroup is the reference for Z-Order
+                        let panelActor = child.first_child?.first_child;
+                        if (allowDock && panelActor) {
+                            let [x, y] = panelActor.get_transformed_position();
+                            let [w, h] = panelActor.get_transformed_size();
+                            if (w > 0 && h > 0) {
+                                let rect = {
+                                    x: Math.floor(x),
+                                    y: Math.floor(y),
+                                    width: Math.floor(w),
+                                    height: Math.floor(h)
+                                };
+                                dockWindows.push({ rect, actor: panelActor, isDock: true });
+                            }
                         }
+                        break;
                     }
-                    break;
                 }
             }
 
@@ -558,8 +562,9 @@ export const GnomeletManager = GObject.registerClass(
                     }
                 }
 
+                let dockSupportMode = this._settings.get_string('dock-support');
                 // Use the new modular scanner
-                let { dockContainer, dockWindows } = this._scanForDocks(allowDock);
+                let { dockContainer, dockWindows } = this._scanForDocks(allowDock, dockSupportMode);
                 if (dockWindows.length > 0) {
                     this._windows.push(...dockWindows);
                 }
