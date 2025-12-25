@@ -381,8 +381,13 @@ export const Gnomelet = GObject.registerClass(
                     }
                     global.window_group.add_child(this.actor);
                 }
-                // Place it right above the window it landed on
-                global.window_group.set_child_above_sibling(this.actor, landedOnWindow.actor);
+
+                // Only place it right above the window if it's NOT the dock.
+                // Dash to Dock is in uiGroup (higher z-order), so being in window_group 
+                // naturally places us behind it, satisfying the requirement to never draw in front.
+                if (!landedOnWindow.isDock) {
+                    global.window_group.set_child_above_sibling(this.actor, landedOnWindow.actor);
+                }
 
             } else {
                 // If on the floor, apply calculated Z-order preference (passed from Manager)

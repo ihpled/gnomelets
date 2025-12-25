@@ -481,31 +481,49 @@ export const GnomeletManager = GObject.registerClass(
                 }
 
                 // 4. (New) Find Dash-to-Dock
-                // Dash-to-Dock places its main container (DashToDock) in uiGroup.
-                // We identify it by its constructor name.
-                let uiChildren = Main.layoutManager.uiGroup.get_children();
-                searchLoop:
-                for (let child of uiChildren) {
-                    if (child.visible && child.mapped && child.constructor && child.constructor.name === 'DashToDock') {
-                        let dashToDock = child;
-                        for (let child of dashToDock.get_children()) {
-                            // DashSlideContainer is the main non-transparent container for the dock
-                            if (child.constructor && child.constructor.name === 'DashSlideContainer') {
-                                let [x, y] = child.get_transformed_position();
-                                let [w, h] = child.get_transformed_size();
+                // Logic to determine if Dash-to-Dock is a VALID landing surface
+                let allowDock = true;
+                let hasMaximized = maximizedIndices.length > 0;
 
-                                // Only count it if it has dimensions
-                                if (w > 0 && h > 0) {
-                                    // Create a rect object compatible with Meta.Window rect interface (x, y, width, height)
-                                    let rect = { x: Math.floor(x), y: Math.floor(y), width: Math.floor(w), height: Math.floor(h) };
-                                    this._windows.push({ rect, actor: child });
-                                }
-                                // Found it, no need to search further
-                                break searchLoop;
-                            }
+                if (hasMaximized) {
+                    if (floorMode === 'disallow') {
+                        allowDock = false;
+                    } else if (floorMode === 'partial') {
+                        // Only allow if focused window exists and is NOT maximized
+                        let focusedUnique = (focusedIndex !== -1);
+                        if (!focusedUnique || focusedIsMaximized) {
+                            allowDock = false;
                         }
-                        // Found it, no need to search further
-                        break;
+                    }
+                }
+
+                if (allowDock) {
+                    // Dash-to-Dock places its main container (DashToDock) in uiGroup.
+                    // We identify it by its constructor name.
+                    let uiChildren = Main.layoutManager.uiGroup.get_children();
+                    searchLoop:
+                    for (let child of uiChildren) {
+                        if (child.visible && child.mapped && child.constructor && child.constructor.name === 'DashToDock') {
+                            let dashToDock = child;
+                            for (let child of dashToDock.get_children()) {
+                                // DashSlideContainer is the main non-transparent container for the dock
+                                if (child.constructor && child.constructor.name === 'DashSlideContainer') {
+                                    let [x, y] = child.get_transformed_position();
+                                    let [w, h] = child.get_transformed_size();
+
+                                    // Only count it if it has dimensions
+                                    if (w > 0 && h > 0) {
+                                        // Create a rect object compatible with Meta.Window rect interface (x, y, width, height)
+                                        let rect = { x: Math.floor(x), y: Math.floor(y), width: Math.floor(w), height: Math.floor(h) };
+                                        this._windows.push({ rect, actor: child, isDock: true });
+                                    }
+                                    // Found it, no need to search further
+                                    break searchLoop;
+                                }
+                            }
+                            // Found it, no need to search further
+                            break;
+                        }
                     }
                 }
 
