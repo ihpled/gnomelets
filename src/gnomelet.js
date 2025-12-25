@@ -399,10 +399,17 @@ export const Gnomelet = GObject.registerClass(
                         Main.layoutManager.addChrome(this.actor);
                     }
 
-                    // Force below dock if present and we are in the same group (uiGroup)
-                    if (dockContainer && this.actor.get_parent() === Main.layoutManager.uiGroup) {
-                        // Only reorder if the dock is actually a sibling in uiGroup
-                        if (dockContainer.get_parent() === Main.layoutManager.uiGroup) {
+                    // Handle Dash-to-Dock Z-Order
+                    // Only reorder if the dock is actually a sibling in uiGroup
+                    if (dockContainer && this.actor.get_parent() === Main.layoutManager.uiGroup &&
+                        dockContainer.get_parent() === Main.layoutManager.uiGroup) {
+
+                        let dockOrder = this._settings.get_boolean('dock-z-order');
+                        if (dockOrder) {
+                            // In Front of Dash to Dock
+                            Main.layoutManager.uiGroup.set_child_above_sibling(this.actor, dockContainer);
+                        } else {
+                            // Default: Behind Dash to Dock
                             Main.layoutManager.uiGroup.set_child_below_sibling(this.actor, dockContainer);
                         }
                     }

@@ -16,6 +16,14 @@
         'disallow' - Behind if any visible window is maximized.
       </description>
     </key>
+    <key name="dock-z-order" type="b">
+      <default>false</default>
+      <summary>In Front of Dash to Dock</summary>
+      <description>
+        If true, gnomelets are drawn in front of the dock.
+        If false, they are drawn behind.
+      </description>
+    </key>
     <key name="gnomelet-type" type="as">
       <default>['Santa']</default>
       <summary>Gnomelet Characters</summary>

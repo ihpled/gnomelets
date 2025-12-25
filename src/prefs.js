@@ -139,6 +139,18 @@ export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
 
         group.add(zOrderRow);
 
+        // In Front of Dash to Dock (mapped to dock-z-order)
+        const dockZOrderRow = new Adw.ActionRow({
+            title: 'In Front of Dash to Dock',
+            subtitle: 'If enabled, gnomelets appear in front of the dock',
+        });
+        const dockZOrderSwitch = new Gtk.Switch({
+            valign: Gtk.Align.CENTER,
+        });
+        settings.bind('dock-z-order', dockZOrderSwitch, 'active', Gio.SettingsBindFlags.DEFAULT);
+        dockZOrderRow.add_suffix(dockZOrderSwitch);
+        group.add(dockZOrderRow);
+
         // Allow Interaction
         const interactionRow = new Adw.ActionRow({
             title: 'Allow Interaction',
