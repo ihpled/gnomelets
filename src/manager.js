@@ -386,6 +386,85 @@ export const GnomeletManager = GObject.registerClass(
         }
 
         /**
+         * Scans for dock/panel identifiers to determine collision and z-ordering.
+         * Supports Dash to Dock and Dash to Panel.
+         */
+        _scanForDocks(allowDock) {
+            let dockContainer = null;
+            let dockWindows = [];
+
+            let uiChildren = Main.layoutManager.uiGroup.get_children();
+
+            for (let child of uiChildren) {
+                if (!child.visible && !child.mapped) continue;
+
+                // --- 1. Dash to Dock Support ---
+                if (child.constructor && child.constructor.name === 'DashToDock') {
+                    dockContainer = child;
+                    if (allowDock) {
+                        for (let subChild of child.get_children()) {
+                            // DashSlideContainer is the main non-transparent container for the dock
+                            if (subChild.constructor && subChild.constructor.name === 'DashSlideContainer') {
+                                let [x, y] = subChild.get_transformed_position();
+                                let [w, h] = subChild.get_transformed_size();
+                                if (w > 0 && h > 0) {
+                                    let rect = {
+                                        x: Math.floor(x),
+                                        y: Math.floor(y),
+                                        width: Math.floor(w),
+                                        height: Math.floor(h)
+                                    };
+                                    dockWindows.push({ rect, actor: subChild, isDock: true });
+                                }
+                            }
+                        }
+                    }
+                    // Prefer Dash to Dock if found
+                    break;
+                }
+
+                // --- 2. Dash to Panel Support ---
+                // Heuristic based on User Request:
+                // child?.first_child?.first_child?.style_class?.startsWith('dashtopanelPanel')
+                // let isDashToPanel = false;
+                // let panelActor = null;
+                // try {
+                //     let l1 = child.first_child;
+                //     if (l1) {
+                //         let l2 = l1.first_child;
+                //         if (l2 && l2.style_class && l2.style_class.startsWith('dashtopanelPanel')) {
+                //             isDashToPanel = true;
+                //             panelActor = l2;
+                //         }
+                //     }
+                // } catch (e) { }
+
+                let isDashToPanel = child.first_child?.first_child?.style_class?.startsWith('dashtopanelPanel');
+
+                if (isDashToPanel) {
+                    dockContainer = child; // The container in uiGroup is the reference for Z-Order
+                    let panelActor = child.first_child?.first_child;
+                    if (allowDock && panelActor) {
+                        let [x, y] = panelActor.get_transformed_position();
+                        let [w, h] = panelActor.get_transformed_size();
+                        if (w > 0 && h > 0) {
+                            let rect = {
+                                x: Math.floor(x),
+                                y: Math.floor(y),
+                                width: Math.floor(w),
+                                height: Math.floor(h)
+                            };
+                            dockWindows.push({ rect, actor: panelActor, isDock: true });
+                        }
+                    }
+                    break;
+                }
+            }
+
+            return { dockContainer, dockWindows };
+        }
+
+        /**
          * Tick function executed every loop to gather windows and update character states.
          */
         _tick() {
@@ -480,10 +559,8 @@ export const GnomeletManager = GObject.registerClass(
                     this._windows.push({ rect, actor });
                 }
 
-                // 4. (New) Find Dash-to-Dock
-                // Logic to determine if Dash-to-Dock is a VALID landing surface
+                // 4. Find Docks (Dash to Dock / Dash to Panel)
                 let allowDock = true;
-                let dashContainer = null;
                 let hasMaximized = maximizedIndices.length > 0;
 
                 if (hasMaximized) {
@@ -498,43 +575,13 @@ export const GnomeletManager = GObject.registerClass(
                     }
                 }
 
-                // New Option: In Front of Dash to Dock
-                // We no longer prevent landing if dock-z-order is false.
-                // The z-order is handled purely in the gnomelet drawing logic.
-
-                // Dash-to-Dock places its main container (DashToDock) in uiGroup.
-                // We identify it by its constructor name.
-                let uiChildren = Main.layoutManager.uiGroup.get_children();
-                searchLoop:
-                for (let child of uiChildren) {
-                    if (child.visible && child.mapped && child.constructor && child.constructor.name === 'DashToDock') {
-                        dashContainer = child;
-
-                        if (allowDock) {
-                            let dashToDock = child;
-                            for (let subChild of dashToDock.get_children()) {
-                                // DashSlideContainer is the main non-transparent container for the dock
-                                if (subChild.constructor && subChild.constructor.name === 'DashSlideContainer') {
-                                    let [x, y] = subChild.get_transformed_position();
-                                    let [w, h] = subChild.get_transformed_size();
-
-                                    // Only count it if it has dimensions
-                                    if (w > 0 && h > 0) {
-                                        // Create a rect object compatible with Meta.Window rect interface (x, y, width, height)
-                                        let rect = { x: Math.floor(x), y: Math.floor(y), width: Math.floor(w), height: Math.floor(h) };
-                                        this._windows.push({ rect, actor: subChild, isDock: true });
-                                    }
-                                    // Found it, no need to search further
-                                    break searchLoop;
-                                }
-                            }
-                        }
-                        // Found it, no need to search further
-                        break;
-                    }
+                // Use the new modular scanner
+                let { dockContainer, dockWindows } = this._scanForDocks(allowDock);
+                if (dockWindows.length > 0) {
+                    this._windows.push(...dockWindows);
                 }
 
-                for (let p of this._gnomelets) p.update(this._windows, forceBackground, dashContainer);
+                for (let p of this._gnomelets) p.update(this._windows, forceBackground, dockContainer);
             } catch (e) {
                 console.error(e);
             }

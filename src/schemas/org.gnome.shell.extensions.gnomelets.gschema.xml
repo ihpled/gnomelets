@@ -18,9 +18,9 @@
     </key>
     <key name="dock-z-order" type="b">
       <default>false</default>
-      <summary>In Front of Dash to Dock</summary>
+      <summary>In Front of Dock</summary>
       <description>
-        If true, gnomelets are drawn in front of the dock.
+        If true, gnomelets are drawn in front of the dock of "Dash to Dock" or Panel of "Dash to Panel".
         If false, they are drawn behind.
       </description>
     </key>
