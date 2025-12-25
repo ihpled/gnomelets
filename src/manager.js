@@ -483,6 +483,7 @@ export const GnomeletManager = GObject.registerClass(
                 // 4. (New) Find Dash-to-Dock
                 // Logic to determine if Dash-to-Dock is a VALID landing surface
                 let allowDock = true;
+                let dashContainer = null;
                 let hasMaximized = maximizedIndices.length > 0;
 
                 if (hasMaximized) {
@@ -497,37 +498,39 @@ export const GnomeletManager = GObject.registerClass(
                     }
                 }
 
-                if (allowDock) {
-                    // Dash-to-Dock places its main container (DashToDock) in uiGroup.
-                    // We identify it by its constructor name.
-                    let uiChildren = Main.layoutManager.uiGroup.get_children();
-                    searchLoop:
-                    for (let child of uiChildren) {
-                        if (child.visible && child.mapped && child.constructor && child.constructor.name === 'DashToDock') {
+                // Dash-to-Dock places its main container (DashToDock) in uiGroup.
+                // We identify it by its constructor name.
+                let uiChildren = Main.layoutManager.uiGroup.get_children();
+                searchLoop:
+                for (let child of uiChildren) {
+                    if (child.visible && child.mapped && child.constructor && child.constructor.name === 'DashToDock') {
+                        dashContainer = child;
+
+                        if (allowDock) {
                             let dashToDock = child;
-                            for (let child of dashToDock.get_children()) {
+                            for (let subChild of dashToDock.get_children()) {
                                 // DashSlideContainer is the main non-transparent container for the dock
-                                if (child.constructor && child.constructor.name === 'DashSlideContainer') {
-                                    let [x, y] = child.get_transformed_position();
-                                    let [w, h] = child.get_transformed_size();
+                                if (subChild.constructor && subChild.constructor.name === 'DashSlideContainer') {
+                                    let [x, y] = subChild.get_transformed_position();
+                                    let [w, h] = subChild.get_transformed_size();
 
                                     // Only count it if it has dimensions
                                     if (w > 0 && h > 0) {
                                         // Create a rect object compatible with Meta.Window rect interface (x, y, width, height)
                                         let rect = { x: Math.floor(x), y: Math.floor(y), width: Math.floor(w), height: Math.floor(h) };
-                                        this._windows.push({ rect, actor: child, isDock: true });
+                                        this._windows.push({ rect, actor: subChild, isDock: true });
                                     }
                                     // Found it, no need to search further
                                     break searchLoop;
                                 }
                             }
-                            // Found it, no need to search further
-                            break;
                         }
+                        // Found it, no need to search further
+                        break;
                     }
                 }
 
-                for (let p of this._gnomelets) p.update(this._windows, forceBackground);
+                for (let p of this._gnomelets) p.update(this._windows, forceBackground, dashContainer);
             } catch (e) {
                 console.error(e);
             }

@@ -276,7 +276,7 @@ export const Gnomelet = GObject.registerClass(
         /**
          * Main update loop for the gnomelet.
          */
-        update(windows, forceBackground) {
+        update(windows, forceBackground, dockContainer) {
             if (!this.actor) return; // Guard against updates after destruction
             if (this._state === State.DRAGGING) return; // Suspended physics while dragging
 
@@ -397,6 +397,14 @@ export const Gnomelet = GObject.registerClass(
                     if (parent !== Main.layoutManager.uiGroup) {
                         if (parent) parent.remove_child(this.actor);
                         Main.layoutManager.addChrome(this.actor);
+                    }
+
+                    // Force below dock if present and we are in the same group (uiGroup)
+                    if (dockContainer && this.actor.get_parent() === Main.layoutManager.uiGroup) {
+                        // Only reorder if the dock is actually a sibling in uiGroup
+                        if (dockContainer.get_parent() === Main.layoutManager.uiGroup) {
+                            Main.layoutManager.uiGroup.set_child_below_sibling(this.actor, dockContainer);
+                        }
                     }
                 } else {
                     // Background Group
