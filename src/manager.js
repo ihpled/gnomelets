@@ -462,9 +462,18 @@ export const GnomeletManager = GObject.registerClass(
                 let floorMode = this._settings.get_string('floor-z-order');
 
                 // Helper to check maximization
-                const isMax = (w) => w && !w.minimized &&
-                    w.get_window_type() === Meta.WindowType.NORMAL &&
-                    isWindowMaximized(w);
+                const isMax = (w) => {
+                    if (!w || w.minimized || w.get_window_type() !== Meta.WindowType.NORMAL) {
+                        return false;
+                    }
+
+                    // Exclude Desktop Icons NG (DING) invisible window
+                    if (w.gtk_application_object_path === '/com/rastersoft/ding') {
+                        return false;
+                    }
+
+                    return isWindowMaximized(w);
+                };
 
                 // 1. Gather Key Indices
                 let focusedIndex = -1;
@@ -540,6 +549,10 @@ export const GnomeletManager = GObject.registerClass(
 
                     let actor = actors[i];
                     if (!actor.visible || !actor.meta_window) continue;
+
+                    // Exclude DING from collision surfaces
+                    if (actor.meta_window.gtk_application_object_path === '/com/rastersoft/ding') continue;
+
                     if (actor.meta_window.minimized || isMax(actor.meta_window)) continue;
 
                     let rect = actor.meta_window.get_frame_rect();
