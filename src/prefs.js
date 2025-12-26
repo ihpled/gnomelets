@@ -105,6 +105,20 @@ export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
         scaleRow.add_suffix(scaleSpin);
         group.add(scaleRow);
 
+        // Jump Power Row
+        const jumpRow = new Adw.ActionRow({ title: 'Jump Power' });
+        const jumpSpin = new Gtk.SpinButton({
+            adjustment: new Gtk.Adjustment({
+                lower: 10,
+                upper: 50,
+                step_increment: 1,
+            }),
+            valign: Gtk.Align.CENTER,
+        });
+        settings.bind('jump-power', jumpSpin, 'value', Gio.SettingsBindFlags.DEFAULT);
+        jumpRow.add_suffix(jumpSpin);
+        group.add(jumpRow);
+
         // In Front of Maximized (mapped to floor-z-order)
         const zOrderRow = new Adw.ComboRow({
             title: 'In Front of Maximized',

@@ -71,5 +71,10 @@
       <summary>Allow Interaction</summary>
       <description>If true, gnomelets can be dragged with the mouse.</description>
     </key>
+    <key name="jump-power" type="i">
+      <default>20</default>
+      <summary>Jump Power</summary>
+      <description>The vertical force of the jump.</description>
+    </key>
   </schema>
 </schemalist>

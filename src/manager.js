@@ -215,6 +215,8 @@ export const GnomeletManager = GObject.registerClass(
                 this._updateEnabledState();
             } else if (key === 'allow-interaction') {
                 this._updateInteractions();
+            } else if (key === 'jump-power') {
+                this._updateJumpPower();
             }
         }
 
@@ -281,6 +283,12 @@ export const GnomeletManager = GObject.registerClass(
         _updateScale() {
             for (let p of this._gnomelets) {
                 p.updateScale();
+            }
+        }
+
+        _updateJumpPower() {
+            for (let p of this._gnomelets) {
+                p.updateJumpPower();
             }
         }
 

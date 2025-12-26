@@ -9,9 +9,6 @@ import {
     State,
     GRAVITY,
     WALK_SPEED,
-    JUMP_VELOCITY,
-    JUMP_REACH_X,
-    MAX_JUMP_HEIGHT,
     isWindowMaximized
 } from './utils.js';
 
@@ -56,16 +53,23 @@ export const Gnomelet = GObject.registerClass(
             // --- Actor Setup (St.Icon) ---
             // NOTE: St.Icon handles scaling better when using only icon_size.
             // We avoid explicit width/height to prevent conflicts with internal icon management.
-            this.actor = new St.Icon({
+            this._icon = new St.Icon({
                 visible: true,
                 reactive: false,
                 icon_size: iconSize,
                 style: 'padding: 0px; object-fit: fill;',
             });
 
+            this.actor = new St.Widget({
+                visible: true,
+                reactive: false,
+                layout_manager: new Clutter.BinLayout(),
+            });
+            this.actor.add_child(this._icon);
+
             // Set initial frame content
             if (this._frameImages.length > 0 && this._frameImages[0]) {
-                this.actor.set_gicon(this._frameImages[0]);
+                this._icon.set_gicon(this._frameImages[0]);
             }
 
             this.actor._delegate = this; // Fix for DND source identification
@@ -75,6 +79,7 @@ export const Gnomelet = GObject.registerClass(
             this.actor.set_position(this._x, this._y);
 
             this._updateInteraction();
+            this.updateJumpPower();
             this._updateAnimation();
         }
 
@@ -125,11 +130,22 @@ export const Gnomelet = GObject.registerClass(
             let iconSize = this._updateDimensions();
 
             // Update the visual size of the icon
-            this.actor.set_icon_size(iconSize);
+            this._icon.set_icon_size(iconSize);
 
             // Adjust Y position so feet stay at the same ground level
             this._y = this._y + oldH - this._displayH;
             this.actor.set_position(this._x, this._y);
+        }
+
+        /**
+         * Updates jump parameters from settings.
+         */
+        updateJumpPower() {
+            let power = this._settings.get_int('jump-power');
+            this._jumpVelocity = -Math.abs(power);
+            // Re-calculate derived constants
+            this._jumpReachX = (WALK_SPEED * 2) * Math.abs(this._jumpVelocity / GRAVITY);
+            this._maxJumpHeight = (this._jumpVelocity * this._jumpVelocity) / (2 * GRAVITY);
         }
 
         /**
@@ -210,11 +226,12 @@ export const Gnomelet = GObject.registerClass(
             // Reset visual transforms that might be corrupted by external DND logic
             this.actor.rotation_angle_z = 0;
             this.actor.scale_y = 1;
+            this.actor.scale_x = 1; // Ensure container is not flipped
             this.actor.opacity = 255;
 
             // Re-apply correct facing (scale_x)
-            this.actor.set_pivot_point(0.5, 0.5);
-            this.actor.scale_x = this.facingRight ? 1 : -1;
+            this._icon.set_pivot_point(0.5, 0.5);
+            this._icon.scale_x = this.facingRight ? 1 : -1;
 
             this._state = State.FALLING;
             this._vx = 0;
@@ -378,7 +395,7 @@ export const Gnomelet = GObject.registerClass(
             }
 
             // --- Z-Ordering / Layering Logic ---
-            if (landedOnWindow) {
+            if (landedOnWindow && !landedOnWindow.isDock) {
                 // If on a window, it must be in the same group to be ordered relative to it
                 let parent = this.actor.get_parent();
                 if (parent !== global.window_group) {
@@ -390,12 +407,7 @@ export const Gnomelet = GObject.registerClass(
                     global.window_group.add_child(this.actor);
                 }
 
-                // Only place it right above the window if it's NOT the dock.
-                // Dash to Dock is in uiGroup (higher z-order), so being in window_group 
-                // naturally places us behind it, satisfying the requirement to never draw in front.
-                if (!landedOnWindow.isDock) {
-                    global.window_group.set_child_above_sibling(this.actor, landedOnWindow.actor);
-                }
+                global.window_group.set_child_above_sibling(this.actor, landedOnWindow.actor);
 
             } else {
                 // If on the floor, apply calculated Z-order preference (passed from Manager)
@@ -490,16 +502,16 @@ export const Gnomelet = GObject.registerClass(
                     // Check if window is horizontally within range of our feet
                     // We extend the "virtual" window size if we are approaching it from the side
                     if (currFeetX < rect.x && this.facingRight) {
-                        effectiveMinX -= JUMP_REACH_X;
+                        effectiveMinX -= this._jumpReachX;
                     } else if (currFeetX > rect.x + rect.width && !this.facingRight) {
-                        effectiveMaxX += JUMP_REACH_X;
+                        effectiveMaxX += this._jumpReachX;
                     }
 
                     if (currFeetX >= effectiveMinX && currFeetX <= effectiveMaxX) {
                         // Check if window is vertically above us and reachable
                         // Window top (rect.y) must be less than feet (currFeetY)
                         let dist = currFeetY - rect.y;
-                        if (dist > 0 && dist <= MAX_JUMP_HEIGHT) {
+                        if (dist > 0 && dist <= this._maxJumpHeight) {
                             // Only jump if we can actually fit on top of the target window 
                             // without being blocked by the screen top (ceiling)
                             if (rect.y - this._displayH >= currentMonitor.y) {
@@ -641,7 +653,7 @@ export const Gnomelet = GObject.registerClass(
          */
         _performJump() {
             this._state = State.JUMPING;
-            this._vy = JUMP_VELOCITY;
+            this._vy = this._jumpVelocity;
             let dir = this.facingRight ? 1 : -1;
             this._vx = dir * WALK_SPEED * 2;
         }
@@ -690,15 +702,15 @@ export const Gnomelet = GObject.registerClass(
             this._lastFacing = this.facingRight;
 
             if (this._frameImages && this._frameImages[frameIndex]) {
-                this.actor.set_gicon(this._frameImages[frameIndex]);
+                this._icon.set_gicon(this._frameImages[frameIndex]);
             }
 
             // Horizontal mirroring
-            this.actor.set_pivot_point(0.5, 0.5);
+            this._icon.set_pivot_point(0.5, 0.5);
             if (this.facingRight) {
-                this.actor.scale_x = 1;
+                this._icon.scale_x = 1;
             } else {
-                this.actor.scale_x = -1;
+                this._icon.scale_x = -1;
             }
         }
 
