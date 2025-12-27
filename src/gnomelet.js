@@ -9,7 +9,8 @@ import {
     State,
     GRAVITY,
     WALK_SPEED,
-    isWindowMaximized
+    isWindowMaximized,
+    UPDATE_INTERVAL_MS
 } from './utils.js';
 
 /**
@@ -175,6 +176,8 @@ export const Gnomelet = GObject.registerClass(
             this._vx = 0;
             this._vy = 0;
             this._updateAnimation();
+            this._dragHistory = []; // Initialize drag history for momentum calculation
+            this._dropTime = 0;
 
             // Create a full-screen transparent overlay to capture the drop event
             // This prevents the shell crash caused by unhiding the source actor from pick
@@ -187,7 +190,20 @@ export const Gnomelet = GObject.registerClass(
             Main.layoutManager.uiGroup.add_child(this._dragOverlay);
         }
 
-        handleDragOver(source, actor, x, y, time) {
+        handleDragOver(source, actor, x, y) {
+            // Track mouse history for momentum calculation
+            if (!this._dragHistory) this._dragHistory = [];
+
+            // Limit history to last ~300ms or 10 points to keep it relevant
+            const now = Date.now();
+            this._dragHistory.push({ x, y, time: now });
+
+            // Prune old history
+            const HISTORY_LIMIT_MS = 200;
+            while (this._dragHistory.length > 0 && now - this._dragHistory[0].time > HISTORY_LIMIT_MS) {
+                this._dragHistory.shift();
+            }
+
             // We accept drag over from ourselves (or potentially others if we wanted)
             return DND.DragMotionResult.MOVE_DROP;
         }
@@ -196,6 +212,7 @@ export const Gnomelet = GObject.registerClass(
             // Update internal coordinates
             this._x = actor.x;
             this._y = actor.y;
+            this._dropTime = time; // Capture drop time for momentum check
 
             // CRITICAL: Reparent to window_group to save it from dnd.js auto-destruction.
             // dnd.js attempts to destroy the drag actor if it is found in Main.uiGroup after a successful drop.
@@ -234,12 +251,69 @@ export const Gnomelet = GObject.registerClass(
             this._icon.scale_x = this.facingRight ? 1 : -1;
 
             this._state = State.FALLING;
-            this._vx = 0;
-            this._vy = 0;
+
+            // Calculate and apply momentum from drag
+            const momentum = this._calculateMomentum();
+            this._vx = momentum.vx;
+            this._vy = momentum.vy;
 
             // Now that the drag flow is complete and dnd.js is satisfied, 
             // put the actor back in the correct layer (which might be uiGroup).
             this._resetLayer();
+        }
+
+        /**
+         * Calculates velocity based on drag history.
+         * Returns values in pixels/frame (consistent with update loop).
+         */
+        _calculateMomentum() {
+            if (!this._dragHistory || this._dragHistory.length < 2) {
+                return { vx: 0, vy: 0 };
+            }
+
+            const last = this._dragHistory[this._dragHistory.length - 1];
+
+            // If the last drag event was too long ago (e.g. user paused before dropping), 
+            // momentum should be zero.
+            if (this._dropTime && (this._dropTime - last.time > 100)) {
+                return { vx: 0, vy: 0 };
+            }
+
+            // Look back ~100ms for a good average, but ensure we have at least 2 points
+            let prev = this._dragHistory[0];
+
+            // Try to find a sample roughly 50-100ms ago
+            for (let i = this._dragHistory.length - 2; i >= 0; i--) {
+                const sample = this._dragHistory[i];
+                const dt = last.time - sample.time;
+                if (dt >= 50 && dt <= 150) {
+                    prev = sample;
+                    break;
+                }
+            }
+
+            const dt = last.time - prev.time;
+            if (dt <= 0) return { vx: 0, vy: 0 };
+
+            // Calculate pixels per ms
+            const vX_ms = (last.x - prev.x) / dt;
+            const vY_ms = (last.y - prev.y) / dt;
+
+            // Convert to pixels per frame (50ms)
+            // Scaling factor can be tweaked for "feel". 
+            // 1.0 would be mathematically correct if the update loop was perfectly timed and physics were continuous.
+            // A slight boost might make it feel more "swishy".
+            const SCALE_FACTOR = 0.25;
+
+            let vx = vX_ms * UPDATE_INTERVAL_MS * SCALE_FACTOR;
+            let vy = vY_ms * UPDATE_INTERVAL_MS * SCALE_FACTOR;
+
+            // Clamp max velocity to prevent exploding offscreen
+            const MAX_VELOCITY = 50;
+            vx = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, vx));
+            vy = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, vy));
+
+            return { vx, vy };
         }
 
         /**

@@ -23,7 +23,7 @@ You can now select Santa as your desktop companion to bring some festive cheer t
 *   **Multi-Monitor Support**: They can travel and spawn across all your connected screens.
 *   **Smart AI Behavior**: Gnomelets employ intelligent jumping mechanics, detecting edges to perform daring leaps and predicting reachable windows to climb upwards dynamically.
 *   **Top Bar Controls**: A convenient menu in the top bar lets you instantly re-spawn all gnomelets or toggle their visibility on/off without opening settings.
-*   **Interactive Drag & Drop**: Pick up gnomelets with your mouse and move them around! Enable interaction in settings to drag them to new locations.
+*   **Interactive Drag & Drop with Momentum**: Pick up gnomelets with your mouse and toss them! They now support physics-based throwing—release them while moving the mouse to fling them across the screen.
 *   **Dash to Dock (Ubuntu Dock) & Dash to Panel Support**: Gnomelets can now recognize, land on, and explore both Dash to Dock (Ubuntu Dock) and Dash to Panel if they are present on your screen!
 
 ## Configuration
