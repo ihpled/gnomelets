@@ -681,6 +681,9 @@ export const Gnomelet = GObject.registerClass(
                 this._x = Math.floor(m.x + Math.random() * (m.width - this._displayW));
                 this._y = m.y;
             }
+
+            let spawnOffset = this._settings.get_int('spawn-offset');
+            this._y += spawnOffset;
         }
 
         /**

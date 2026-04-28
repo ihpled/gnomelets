@@ -11,8 +11,11 @@ export const State = {
 };
 
 /**
- * Utility to check if a window is maximized
+ * Utility to check if a window is maximized or full-screen
  */
 export function isWindowMaximized(window) {
-    return window && window.maximized_horizontally && window.maximized_vertically;
+    if (!window) return false;
+    const isMax = window.maximized_horizontally && window.maximized_vertically;
+    const isFull = typeof window.is_fullscreen === 'function' ? window.is_fullscreen() : false;
+    return isMax || isFull;
 }

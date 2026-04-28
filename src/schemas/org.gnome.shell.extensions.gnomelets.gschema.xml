@@ -76,5 +76,10 @@
       <summary>Jump Power</summary>
       <description>The vertical force of the jump.</description>
     </key>
+    <key name="spawn-offset" type="i">
+      <default>0</default>
+      <summary>Spawn Offset from Top</summary>
+      <description>The vertical offset from the top of the screen where gnomelets spawn.</description>
+    </key>
   </schema>
 </schemalist>

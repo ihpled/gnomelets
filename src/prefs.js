@@ -119,6 +119,17 @@ export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
         jumpRow.add_suffix(jumpSpin);
         group.add(jumpRow);
 
+        // Spawn offset from top
+        const spawnOffsetRow = new Adw.ActionRow({ title: 'Spawn Offset from Top' });
+        const spawnOffsetSpin = new Gtk.SpinButton({
+            adjustment: new Gtk.Adjustment({ lower: 0, upper: 100, step_increment: 10 }),
+            numeric: true,
+            valign: Gtk.Align.CENTER
+        });
+        settings.bind('spawn-offset', spawnOffsetSpin, 'value', Gio.SettingsBindFlags.DEFAULT);
+        spawnOffsetRow.add_suffix(spawnOffsetSpin);
+        group.add(spawnOffsetRow);
+
         // In Front of Maximized (mapped to floor-z-order)
         const zOrderRow = new Adw.ComboRow({
             title: 'In Front of Maximized',
