@@ -7,12 +7,6 @@ Watch as they fall from the top of the screen, land on your active windows, and 
 
 https://github.com/user-attachments/assets/2a6e47ec-c063-4d65-87ba-e7559144d641
 
-## 🎄 Christmas Special Edition 🎄
-
-**Ho Ho Ho!**
-In the spirit of the holiday season, we have added a special guest: **Santa Claus**! 
-You can now select Santa as your desktop companion to bring some festive cheer to your workflow.
-
 ## Features
 
 *   **Custom Characters**: Easily add your own pixel-art characters.
