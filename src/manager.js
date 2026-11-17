@@ -298,13 +298,13 @@ export const GnomeletManager = GObject.registerClass(
         }
 
         _updateScale() {
-            for (let p of this._gnomelets) {
+            for (let p of [...this._gnomelets, ...this._claudePets]) {
                 p.updateScale();
             }
         }
 
         _updateJumpPower() {
-            for (let p of this._gnomelets) {
+            for (let p of [...this._gnomelets, ...this._claudePets]) {
                 p.updateJumpPower();
             }
         }

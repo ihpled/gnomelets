@@ -138,6 +138,15 @@ export class SpeechBubble {
         });
     }
 
+    /** Hides immediately, without animation. Cheap no-op if already hidden. */
+    hideNow() {
+        if (this._destroyed || !this._box || !this._box.visible) return;
+        this._clearTimeout();
+        this._box.remove_all_transitions();
+        this._box.opacity = 0;
+        this._box.hide();
+    }
+
     reposition(rect) {
         if (this._destroyed || !this._box || !this._box.visible) return;
         _placeNear(this._box, rect);
@@ -342,7 +351,9 @@ export class ResponseBubble {
         const inner = new St.BoxLayout({ vertical: true });
         this._label = _makeLabel('', 'max-width: 400px;');
         inner.add_child(this._label);
-        scroll.add_child(inner);
+        // GNOME 45: St.ScrollView is an St.Bin (set_child); 46+: it has its own
+        // set_child()/child property. add_child() does not wire up scrolling on 46+.
+        scroll.set_child(inner);
         this._box.add_child(scroll);
 
         Main.layoutManager.addChrome(this._box);

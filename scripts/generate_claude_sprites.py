@@ -27,8 +27,11 @@ FRAME CONTRACT (index -> content)
   30     jump ascending (arms up, stretched)
   31     fall (arms flailing up, eyes wide)
 
-Baseline: the lowest opaque row of every frame is row 29 (of 32) except the
-documented airborne frames 17 and 18 (happy hop / peak), which hover above it.
+Baseline: frames are designed with the feet on row 29 and then shifted down by
+FOOT_SHIFT rows on export, so the lowest opaque row of every frame is the last
+row (31 of 32) and the pet stands flush on window edges like the other
+characters. Exceptions: the documented airborne frames 17 and 18 (happy hop /
+peak), which hover above it.
 """
 import argparse
 import os
@@ -39,6 +42,7 @@ from PIL import Image, ImageDraw
 SIZE = 32
 SCALE = 4
 BASE_ROW = 29
+FOOT_SHIFT = SIZE - 1 - BASE_ROW  # export shift: feet land on the last row
 
 PAL = {
     'O': (0x3B, 0x22, 0x18),  # outline
@@ -94,7 +98,8 @@ class Cv:
             for x in range(SIZE):
                 k = self.g[y][x]
                 if k:
-                    im.putpixel((x, y), PAL[k] + (255,))
+                    assert y + FOOT_SHIFT < SIZE, 'pixel below the baseline would be cropped'
+                    im.putpixel((x, y + FOOT_SHIFT), PAL[k] + (255,))
         return im.resize((SIZE * SCALE, SIZE * SCALE), Image.NEAREST)
 
 
@@ -349,9 +354,9 @@ def build_frames():
         bot(cv, bb=bb, eyes='look_r', armL=arms[0], armR=arms[1], legs=legs, offs=offs)
         return cv
     F[0] = walk(('drop0', 'drop2'), ((-1, 29), (1, 29)), 26, (0, 0, 0))
-    F[1] = walk(('drop1', 'drop1'), ((0, 29), (0, 28)), 25, (0, 0, 1))
+    F[1] = walk(('drop1', 'drop1'), ((0, 29), (1, 27)), 25, (0, 0, 1))
     F[2] = walk(('drop2', 'drop0'), ((-1, 29), (1, 29)), 26, (0, 0, 0))
-    F[3] = walk(('drop1', 'drop1'), ((0, 28), (0, 29)), 25, (0, 0, -1))
+    F[3] = walk(('drop1', 'drop1'), ((-1, 27), (0, 29)), 25, (0, 0, -1))
 
     # ---- idle 4
     cv = Cv()
@@ -444,12 +449,12 @@ def build_frames():
 
     # ---- sit 24-25
     cv = Cv()
-    bot(cv, bb=25, eyes='look_r', armL='drop0', armR='drop0',
-        legs=((0, 29), (1, 28)), offs=(0, 0, 1))
+    bot(cv, bb=28, eyes='look_r', armL='drop0', armR='drop0',
+        legs=((-3, 29), (3, 29)), offs=(0, 0, 1))
     F[24] = cv
     cv = Cv()
-    bot(cv, bb=24, eyes='look_r', armL='drop0', armR='drop0',
-        legs=((-1, 28), (0, 29)), offs=(0, 0, 0))
+    bot(cv, bb=28, eyes='look_r', armL='drop0', armR='drop0',
+        legs=((-2, 29), (2, 29)), offs=(0, 0, 0))
     F[25] = cv
 
     # ---- climb 26-29

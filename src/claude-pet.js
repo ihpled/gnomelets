@@ -64,6 +64,7 @@ function resolveClaudeBinary() {
     const home = GLib.get_home_dir();
     const candidates = [
         `${home}/.local/bin/claude`,
+        `${home}/.claude/local/claude`,
         '/usr/local/bin/claude',
         `${home}/.npm-global/bin/claude`,
         '/usr/bin/claude',
@@ -131,7 +132,10 @@ export class ClaudeRunner {
         try {
             // No shell: argv is passed directly. Permission model is the CLI's own.
             const launcher = new Gio.SubprocessLauncher({
-                flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE,
+                // STDIN_PIPE + communicate(null) closes stdin at once, so the CLI never
+                // waits on (or reads from) the shell's inherited stdin.
+                flags: Gio.SubprocessFlags.STDIN_PIPE | Gio.SubprocessFlags.STDOUT_PIPE |
+                    Gio.SubprocessFlags.STDERR_PIPE,
             });
             launcher.set_cwd(GLib.get_home_dir());
             proc = launcher.spawnv([binary, '-p', safePrompt]);
@@ -154,6 +158,13 @@ export class ClaudeRunner {
             } catch (e) {
                 // Already exited
             }
+            // Report right away: grandchildren may keep the pipes open, so
+            // communicate() is not guaranteed to complete after force_exit().
+            cancellable.cancel();
+            this._proc = null;
+            this._cancellable = null;
+            this._busy = false;
+            if (!this._destroyed) onDone({ kind: 'timeout' });
             return GLib.SOURCE_REMOVE;
         });
 
@@ -243,9 +254,9 @@ export const ClaudePet = GObject.registerClass(
             this._pressing = false;
             this._dragging = false;
             this._press = null;
-            this._lastClickTime = 0;
             this._lastClickX = 0;
             this._lastClickY = 0;
+            this._clickTimeoutId = 0;
 
             // Owned resources
             this._speech = new SpeechBubble();
@@ -331,6 +342,10 @@ export const ClaudePet = GObject.registerClass(
             if (!this._claudeReady || this._destroyed || !this.actor) return;
 
             const rect = this._anchorRect();
+            // In the background layer the pet is hidden behind windows: do not
+            // leave its speech bubble floating on top of them.
+            if (this.actor.get_parent() === Main.layoutManager._backgroundGroup)
+                this._speech.hideNow();
             this._speech.reposition(rect);
             this._response.reposition(rect);
             if (this._input) this._input.reposition(rect);
@@ -435,7 +450,9 @@ export const ClaudePet = GObject.registerClass(
                 return Clutter.EVENT_STOP;
             }
             if (button !== 1) return Clutter.EVENT_PROPAGATE;
-            if (this._pressing) return Clutter.EVENT_STOP;
+            // A previous press whose release never reached the stage (e.g. a grab
+            // elsewhere, or the release happened over an X11 client): recover.
+            if (this._pressing) this._releasePress(this._press ? this._press.x : 0, this._press ? this._press.y : 0, true);
 
             this._wake();
             const [x, y] = event.get_coords();
@@ -455,6 +472,12 @@ export const ClaudePet = GObject.registerClass(
             const type = event.type();
             if (type === Clutter.EventType.MOTION) {
                 const [x, y] = event.get_coords();
+                if (!(event.get_state() & Clutter.ModifierType.BUTTON1_MASK)) {
+                    // Button 1 is no longer held: the release was missed. Never keep
+                    // swallowing pointer motion in that case.
+                    this._releasePress(x, y, true);
+                    return Clutter.EVENT_PROPAGATE;
+                }
                 this._onPointerMove(x, y);
                 return Clutter.EVENT_STOP;
             }
@@ -497,14 +520,20 @@ export const ClaudePet = GObject.registerClass(
             this._dropTime = 0;
             this._setMood(null, 0);
 
-            // Keep the dragged pet on top of its current layer
+            // Lift the dragged pet into the chrome layer (it may be in window_group or
+            // the background group, i.e. behind windows); _endDrag() restores the layer.
+            const lm = Main.layoutManager;
             const parent = this.actor.get_parent();
-            if (parent) parent.set_child_above_sibling(this.actor, null);
+            if (parent !== lm.uiGroup) {
+                if (parent) parent.remove_child(this.actor);
+                lm.addChrome(this.actor);
+            }
+            lm.uiGroup.set_child_above_sibling(this.actor, null);
             this._updateAnimation();
         }
 
-        /** Ends the press (click or drag). Idempotent. */
-        _releasePress(x, y) {
+        /** Ends the press (click or drag). Idempotent. `aborted` = no click. */
+        _releasePress(x, y, aborted = false) {
             if (!this._pressing) return;
             const wasDragging = this._dragging;
             this._endPressTracking();
@@ -513,19 +542,36 @@ export const ClaudePet = GObject.registerClass(
                 this._endDrag();
                 return;
             }
+            if (aborted) return;
 
-            // Click handling (double click = open the prompt)
-            const now = GLib.get_monotonic_time() / 1000;
-            const near = Math.hypot(x - this._lastClickX, y - this._lastClickY) <= DRAG_THRESHOLD_PX;
-            if (now - this._lastClickTime < DOUBLE_CLICK_MS && near &&
-                this._settings.get_boolean('claude-chat-enabled')) {
-                this._lastClickTime = 0;
-                this.openPrompt();
-            } else {
-                this._lastClickTime = now;
-                this._lastClickX = x;
-                this._lastClickY = y;
+            if (!this._settings.get_boolean('claude-chat-enabled')) {
                 this._onClick();
+                return;
+            }
+
+            // Double click = open the prompt. The single-click hop is delayed until
+            // the double-click window has passed, so the pet does not jump away from
+            // under the pointer before the second click.
+            const near = Math.hypot(x - this._lastClickX, y - this._lastClickY) <= DRAG_THRESHOLD_PX;
+            if (this._clickTimeoutId && near) {
+                this._clearClickTimeout();
+                this.openPrompt();
+                return;
+            }
+            this._clearClickTimeout();
+            this._lastClickX = x;
+            this._lastClickY = y;
+            this._clickTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, DOUBLE_CLICK_MS, () => {
+                this._clickTimeoutId = 0;
+                if (!this._destroyed) this._onClick();
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+
+        _clearClickTimeout() {
+            if (this._clickTimeoutId) {
+                GLib.source_remove(this._clickTimeoutId);
+                this._clickTimeoutId = 0;
             }
         }
 
@@ -776,6 +822,7 @@ export const ClaudePet = GObject.registerClass(
             this._pressing = false;
             this._dragging = false;
             this._press = null;
+            this._clearClickTimeout();
 
             for (const id of this._idleSources) GLib.source_remove(id);
             this._idleSources.clear();

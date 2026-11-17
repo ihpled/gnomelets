@@ -1,10 +1,20 @@
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 
 import { CLAUDE_STATE_FILE } from './utils.js';
 
 const VALID_STATES = new Set(['thinking', 'typing', 'done', 'error']);
 const MAX_MESSAGE_LEN = 200;
 const MAX_FILE_BYTES = 8192;
+
+// Current user's uid (null if it cannot be determined: owner check skipped).
+const MY_UID = (() => {
+    try {
+        return Gio.Credentials.new().get_unix_user();
+    } catch (e) {
+        return null;
+    }
+})();
 
 /**
  * Sanitizes untrusted text: strips control characters, caps length.
@@ -87,28 +97,65 @@ export class ClaudeStateWatcher {
         this._reading = true;
         const cancellable = this._cancellable;
         const file = Gio.File.new_for_path(CLAUDE_STATE_FILE);
-        file.load_contents_async(cancellable, (f, res) => {
+
+        const finish = raw => {
             if (this._destroyed || cancellable.is_cancelled() || this._cancellable !== cancellable)
                 return;
             this._reading = false;
-
-            let raw = null;
-            try {
-                const [ok, contents] = f.load_contents_finish(res);
-                if (ok && contents.length <= MAX_FILE_BYTES)
-                    raw = new TextDecoder('utf-8').decode(contents);
-            } catch (e) {
-                // Missing/unreadable file (e.g. deleted): ignore
-            }
-
             if (raw !== null)
                 this._handleRaw(raw);
-
             if (this._rereadPending) {
                 this._rereadPending = false;
                 this._read();
             }
-        });
+        };
+
+        // The path is in world-writable /tmp: only accept a regular file (not a
+        // symlink, FIFO or device such as /dev/zero) owned by the current user,
+        // and never read more than MAX_FILE_BYTES + 1 bytes.
+        file.query_info_async(
+            'standard::type,standard::size,unix::uid',
+            Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, GLib.PRIORITY_DEFAULT, cancellable,
+            (f, res) => {
+                let info;
+                try {
+                    info = f.query_info_finish(res);
+                } catch (e) {
+                    finish(null); // Missing/unreadable (e.g. deleted) or cancelled
+                    return;
+                }
+                if (info.get_file_type() !== Gio.FileType.REGULAR ||
+                    info.get_size() > MAX_FILE_BYTES ||
+                    (MY_UID !== null && info.get_attribute_uint32('unix::uid') !== MY_UID)) {
+                    finish(null);
+                    return;
+                }
+                f.read_async(GLib.PRIORITY_DEFAULT, cancellable, (f2, res2) => {
+                    let stream;
+                    try {
+                        stream = f2.read_finish(res2);
+                    } catch (e) {
+                        finish(null);
+                        return;
+                    }
+                    stream.read_bytes_async(MAX_FILE_BYTES + 1, GLib.PRIORITY_DEFAULT, cancellable, (s, res3) => {
+                        let raw = null;
+                        try {
+                            const bytes = s.read_bytes_finish(res3);
+                            if (bytes.get_size() <= MAX_FILE_BYTES)
+                                raw = new TextDecoder('utf-8').decode(bytes.toArray());
+                        } catch (e) {
+                            // Unreadable or cancelled: ignore
+                        }
+                        try {
+                            s.close(null);
+                        } catch (e) {
+                            // Ignore
+                        }
+                        finish(raw);
+                    });
+                });
+            });
     }
 
     _handleRaw(raw) {

@@ -39,7 +39,7 @@ An optional, interactive pet (folder `images/Claude`) that lives alongside your 
 
 ### Interactions
 
-*   **Click**: a happy hop with pixel sparkles and a speech bubble (a random developer quip, or the live session message if one is active).
+*   **Click**: a happy hop with pixel sparkles and a speech bubble (a random developer quip, or the live session message if one is active). When chat is enabled the hop starts after the short double-click window (about 0.35 s), so a double click never triggers it.
 *   **Double click**: opens a prompt bubble (if chat is enabled). Enter sends, Esc or `x` closes.
 *   **Hold and move (more than 8px)**: drag the pet; release to toss it. It then lands on a window top edge or the screen bottom.
 *   **Right click**: menu with *Ask Claude...*, *Spawn Claude Pet*, *Dismiss Pet* and a *Focus Mode* switch.
@@ -47,11 +47,11 @@ An optional, interactive pet (folder `images/Claude`) that lives alongside your 
 
 ### States
 
-Walking, idle, jumping/falling, climbing (while jumping up towards a window), sitting, dragged, typing, thinking, happy and sleeping (after about 60 seconds without interaction; any interaction wakes it). In **Focus Mode** the pet stays perched on window top edges without walking or random jumps.
+Walking, idle, jumping/falling, climbing (while jumping up towards a window), sitting, dragged, typing, thinking, happy and sleeping (after about 60 seconds without interaction; any interaction wakes it). In **Focus Mode** the pet sits still wherever it landed (for example on a window top edge, where a toss can put it) without walking or random jumps.
 
 ### Asking Claude
 
-The prompt runs `claude -p "<your text>"` headless in your home directory, asynchronously and without a shell, with a 120 second timeout. The pet shows *thinking* and then *typing* while it waits, and the answer appears in a scrollable bubble with Copy and Close buttons (output is capped at about 8000 characters, errors at about 600). The binary is looked up in `PATH` and then in `~/.local/bin`, `/usr/local/bin`, `~/.npm-global/bin` and `/usr/bin`. It runs with the CLI's own permission model; the extension never passes `--dangerously-skip-permissions`. Only one request per pet runs at a time.
+The prompt runs `claude -p "<your text>"` headless in your home directory, asynchronously and without a shell, with a 120 second timeout. The pet shows *thinking* and then *typing* while it waits, and the answer appears in a scrollable bubble with Copy and Close buttons (output is capped at about 8000 characters, errors at about 600). The binary is looked up in `PATH` and then in `~/.local/bin`, `~/.claude/local`, `/usr/local/bin`, `~/.npm-global/bin` and `/usr/bin`. It runs with the CLI's own permission model; the extension never passes `--dangerously-skip-permissions`. Only one request per pet runs at a time.
 
 ### Session state file
 
@@ -72,7 +72,7 @@ echo '{"state":"typing","message":"Running tests..."}' > /tmp/gnomelets-claude-s
 
 ### Security notes
 
-*   The state file lives in world-writable `/tmp` and is **untrusted**: it is size-limited, parsed as JSON, validated, stripped of control characters, capped at 200 characters and shown as plain text only (never markup). It can only change the pet's mood and speech bubble.
+*   The state file lives in world-writable `/tmp` and is **untrusted**: it is only read if it is a regular file (not a symlink, FIFO or device) owned by your user, it is size-limited (8 KiB), parsed as JSON, validated, stripped of control characters, capped at 200 characters and shown as plain text only (never markup). It can only change the pet's mood and speech bubble.
 *   Chat sends your prompt to the local `claude` CLI, which uses your account and its own permission prompts/settings in headless mode. Turn off *Enable Claude Chat* if you do not want the extension to launch it.
 
 ## Adding Custom Characters
