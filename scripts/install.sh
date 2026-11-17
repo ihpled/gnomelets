@@ -7,7 +7,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 SRC_DIR="$PROJECT_ROOT/src"
 
-FILES_TO_INSTALL="extension.js prefs.js metadata.json schemas images manager.js gnomelet.js indicator.js utils.js"
+FILES_TO_INSTALL="extension.js prefs.js metadata.json schemas images manager.js gnomelet.js indicator.js utils.js claude-pet.js claude-ui.js claude-state-watcher.js"
 ZIP_MODE=false
 
 # Check for --zip argument

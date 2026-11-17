@@ -7,7 +7,12 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import { Gnomelet } from './gnomelet.js';
-import { isWindowMaximized, UPDATE_INTERVAL_MS } from './utils.js';
+import { ClaudePet } from './claude-pet.js';
+import { ClaudeStateWatcher } from './claude-state-watcher.js';
+import { isWindowMaximized, UPDATE_INTERVAL_MS, CLAUDE_MAX_PETS } from './utils.js';
+
+const CLAUDE_RESOURCE = 'Claude';
+const FRAME_COUNT = 32; // 0..7 base convention, 8..31 optional extended frames
 
 /**
  * GnomeletManager Class
@@ -18,6 +23,10 @@ export const GnomeletManager = GObject.registerClass(
         _init(settings) {
             super._init();
             this._gnomelets = [];
+            this._claudePets = [];
+            this._claudeWatcher = null;
+            this._claudeLoading = false;
+            this._claudeMissing = false;
             this._settings = settings;
             this._windows = [];
             this._timerId = 0;
@@ -70,79 +79,81 @@ export const GnomeletManager = GObject.registerClass(
             let types = this._settings.get_strv('gnomelet-type');
             if (!types || types.length === 0) types = ['Santa'];
 
-            let loadedSomething = false;
-
-            const loadType = async (typeName) => {
-                if (this._resources[typeName]) return; // Already loaded
-
-                return new Promise((resolve) => {
-                    this._resolveImageFolderAsync(typeName, async (typeDir) => {
-                        if (!typeDir) { resolve(); return; }
-
-                        let frames = [];
-                        let frameW = 0;
-                        let frameH = 0;
-                        let anySuccess = false;
-
-                        const loadFrame = (index) => {
-                            return new Promise((r) => {
-                                let imgFile = typeDir.get_child(`${index}.png`);
-                                imgFile.read_async(GLib.PRIORITY_DEFAULT, this._cancellable, (file, res) => {
-                                    try {
-                                        let stream = file.read_finish(res);
-                                        GdkPixbuf.Pixbuf.new_from_stream_async(stream, this._cancellable, (source, res2) => {
-                                            try {
-                                                let pixbuf = GdkPixbuf.Pixbuf.new_from_stream_finish(res2);
-                                                stream.close(null);
-                                                r({
-                                                    valid: true,
-                                                    w: pixbuf.get_width(),
-                                                    h: pixbuf.get_height(),
-                                                    icon: new Gio.FileIcon({ file: imgFile })
-                                                });
-                                            } catch (e) {
-                                                try { stream.close(null); } catch (err) { }
-                                                r({ valid: false });
-                                            }
-                                        });
-                                    } catch (e) {
-                                        r({ valid: false });
-                                    }
-                                });
-                            });
-                        };
-
-                        let promises = [];
-                        for (let i = 0; i < 8; i++) promises.push(loadFrame(i));
-
-                        let results = await Promise.all(promises);
-                        for (let res of results) {
-                            if (res && res.valid) {
-                                frames.push(res.icon);
-                                if (frameW === 0) {
-                                    frameW = res.w;
-                                    frameH = res.h;
-                                }
-                                anySuccess = true;
-                            } else {
-                                frames.push(null);
-                            }
-                        }
-
-                        if (anySuccess && frameW > 0 && frameH > 0) {
-                            this._resources[typeName] = { frames, w: frameW, h: frameH };
-                            loadedSomething = true;
-                        }
-                        resolve();
-                    });
-                });
-            };
-
             // Load all selected types
-            await Promise.all(types.map(t => loadType(t)));
+            await Promise.all(types.map(t => this._loadType(t)));
 
             if (hardReset) this._hardReset();
             else this._spawnGnomelets(null);
+
+            this._syncClaudePets();
+        }
+
+        /**
+         * Loads frames 0..31 of one type folder (missing frames are null).
+         */
+        _loadType(typeName) {
+            if (this._resources[typeName]) return Promise.resolve(); // Already loaded
+
+            return new Promise((resolve) => {
+                this._resolveImageFolderAsync(typeName, async (typeDir) => {
+                    if (!typeDir) { resolve(); return; }
+
+                    let frames = [];
+                    let frameW = 0;
+                    let frameH = 0;
+                    let anySuccess = false;
+
+                    const loadFrame = (index) => {
+                        return new Promise((r) => {
+                            let imgFile = typeDir.get_child(`${index}.png`);
+                            imgFile.read_async(GLib.PRIORITY_DEFAULT, this._cancellable, (file, res) => {
+                                try {
+                                    let stream = file.read_finish(res);
+                                    GdkPixbuf.Pixbuf.new_from_stream_async(stream, this._cancellable, (source, res2) => {
+                                        try {
+                                            let pixbuf = GdkPixbuf.Pixbuf.new_from_stream_finish(res2);
+                                            stream.close(null);
+                                            r({
+                                                valid: true,
+                                                w: pixbuf.get_width(),
+                                                h: pixbuf.get_height(),
+                                                icon: new Gio.FileIcon({ file: imgFile })
+                                            });
+                                        } catch (e) {
+                                            try { stream.close(null); } catch (err) { }
+                                            r({ valid: false });
+                                        }
+                                    });
+                                } catch (e) {
+                                    r({ valid: false });
+                                }
+                            });
+                        });
+                    };
+
+                    let promises = [];
+                    for (let i = 0; i < FRAME_COUNT; i++) promises.push(loadFrame(i));
+
+                    let results = await Promise.all(promises);
+                    for (let res of results) {
+                        if (res && res.valid) {
+                            frames.push(res.icon);
+                            if (frameW === 0) {
+                                frameW = res.w;
+                                frameH = res.h;
+                            }
+                            anySuccess = true;
+                        } else {
+                            frames.push(null);
+                        }
+                    }
+
+                    if (anySuccess && frameW > 0 && frameH > 0 && this._cancellable) {
+                        this._resources[typeName] = { frames, w: frameW, h: frameH };
+                    }
+                    resolve();
+                });
+            });
         }
 
         get isVisualizationEnabled() {
@@ -217,6 +228,11 @@ export const GnomeletManager = GObject.registerClass(
                 this._updateInteractions();
             } else if (key === 'jump-power') {
                 this._updateJumpPower();
+            } else if (key === 'claude-pet-count') {
+                this._claudeMissing = false;
+                this._syncClaudePets();
+            } else if (key === 'claude-session-sync') {
+                this._updateClaudeWatcher();
             }
         }
 
@@ -239,6 +255,7 @@ export const GnomeletManager = GObject.registerClass(
             this._stopTimer();
 
             this._settings.disconnectObject(this);
+            this._destroyClaudePets();
             this._destroyGnomelets();
             this._resources = {};
         }
@@ -294,12 +311,14 @@ export const GnomeletManager = GObject.registerClass(
 
         _hardReset() {
             this._destroyGnomelets();
+            this._destroyClaudePets();
             try {
                 let f = Gio.File.new_for_path(this._cacheFile);
                 // This delete is synchronous but very fast and rare (user triggered).
                 if (f.query_exists(null)) f.delete(null);
             } catch (e) { }
             this._spawnGnomelets(null);
+            this._syncClaudePets();
         }
 
         /**
@@ -391,6 +410,86 @@ export const GnomeletManager = GObject.registerClass(
         _destroyGnomelets() {
             for (let p of this._gnomelets) p.destroy();
             this._gnomelets = [];
+        }
+
+        // --- Claude pets (independent of gnomelet-type / gnomelet-count) ---
+
+        /**
+         * Brings the number of Claude pets in line with `claude-pet-count`.
+         * Idempotent; does nothing while paused or disabled.
+         */
+        _syncClaudePets() {
+            if (this._isPaused || !this._cancellable || this._cancellable.is_cancelled()) {
+                this._updateClaudeWatcher();
+                return;
+            }
+
+            let want = Math.max(0, Math.min(CLAUDE_MAX_PETS, this._settings.get_int('claude-pet-count')));
+
+            if (want > 0 && !this._resources[CLAUDE_RESOURCE]) {
+                if (!this._claudeLoading && !this._claudeMissing) {
+                    this._claudeLoading = true;
+                    this._loadType(CLAUDE_RESOURCE).then(() => {
+                        this._claudeLoading = false;
+                        if (!this._resources[CLAUDE_RESOURCE]) this._claudeMissing = true;
+                        this._syncClaudePets();
+                    });
+                }
+                return;
+            }
+
+            while (this._claudePets.length < want) {
+                let res = this._resources[CLAUDE_RESOURCE];
+                this._claudePets.push(new ClaudePet(res.frames, res.w, res.h, this._settings, {
+                    spawnPet: () => this._spawnClaudePet(),
+                    dismissPet: (pet) => this._dismissClaudePet(pet),
+                }));
+            }
+            while (this._claudePets.length > want) {
+                this._claudePets.pop().destroy();
+            }
+
+            this._updateClaudeWatcher();
+        }
+
+        _spawnClaudePet() {
+            let count = this._settings.get_int('claude-pet-count');
+            if (count >= CLAUDE_MAX_PETS) return;
+            this._settings.set_int('claude-pet-count', Math.min(CLAUDE_MAX_PETS, count + 1));
+        }
+
+        _dismissClaudePet(pet) {
+            let idx = this._claudePets.indexOf(pet);
+            if (idx < 0) return;
+            this._claudePets.splice(idx, 1);
+            pet.destroy();
+            this._settings.set_int('claude-pet-count', this._claudePets.length);
+            this._updateClaudeWatcher();
+        }
+
+        _destroyClaudePets() {
+            for (let p of this._claudePets) p.destroy();
+            this._claudePets = [];
+            this._updateClaudeWatcher();
+        }
+
+        /**
+         * Creates/destroys the state-file watcher according to the
+         * `claude-session-sync` setting and whether any Claude pet exists.
+         */
+        _updateClaudeWatcher() {
+            let want = !this._isPaused && this._cancellable && !this._cancellable.is_cancelled() &&
+                this._claudePets.length > 0 && this._settings.get_boolean('claude-session-sync');
+
+            if (want && !this._claudeWatcher) {
+                this._claudeWatcher = new ClaudeStateWatcher((state, message) => {
+                    for (let p of [...this._claudePets]) p.applySessionState(state, message);
+                });
+                this._claudeWatcher.start();
+            } else if (!want && this._claudeWatcher) {
+                this._claudeWatcher.destroy();
+                this._claudeWatcher = null;
+            }
         }
 
         /**
@@ -591,6 +690,7 @@ export const GnomeletManager = GObject.registerClass(
                 }
 
                 for (let p of this._gnomelets) p.update(this._windows, forceBackground, dockContainer);
+                for (let p of this._claudePets) p.update(this._windows, forceBackground, dockContainer);
             } catch (e) {
                 console.error(e);
             }
@@ -612,11 +712,13 @@ export const GnomeletManager = GObject.registerClass(
             if (this._isPaused) {
                 this._stopTimer();
                 this._destroyGnomelets();
+                this._destroyClaudePets();
             } else {
                 this._startTimer();
                 // If we have pending state (e.g. from initial load), it will be used.
                 // Otherwise, normal spawn.
                 this._spawnGnomelets(null);
+                this._syncClaudePets();
             }
         }
     });

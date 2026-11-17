@@ -251,6 +251,40 @@ export default class DesktopGnomeletsPreferences extends ExtensionPreferences {
         respawnRow.add_suffix(respawnButton);
         actionsGroup.add(respawnRow);
 
+        // Claude Agent Pet Group
+        const claudeGroup = new Adw.PreferencesGroup({
+            title: 'Claude Agent Pet',
+            description: 'An interactive pet that reacts to your Claude session',
+        });
+        page.add(claudeGroup);
+
+        const claudeCountRow = new Adw.ActionRow({
+            title: 'Number of Claude Pets',
+            subtitle: 'Spawned in addition to the regular gnomelets (0 to 5)',
+        });
+        const claudeCountSpin = new Gtk.SpinButton({
+            adjustment: new Gtk.Adjustment({ lower: 0, upper: 5, step_increment: 1 }),
+            numeric: true,
+            valign: Gtk.Align.CENTER,
+        });
+        settings.bind('claude-pet-count', claudeCountSpin, 'value', Gio.SettingsBindFlags.DEFAULT);
+        claudeCountRow.add_suffix(claudeCountSpin);
+        claudeGroup.add(claudeCountRow);
+
+        const addClaudeSwitch = (key, title, subtitle) => {
+            const row = new Adw.ActionRow({ title, subtitle });
+            const sw = new Gtk.Switch({ valign: Gtk.Align.CENTER });
+            settings.bind(key, sw, 'active', Gio.SettingsBindFlags.DEFAULT);
+            row.add_suffix(sw);
+            claudeGroup.add(row);
+        };
+        addClaudeSwitch('claude-chat-enabled', 'Enable Claude Chat',
+            'Let the pet run the local "claude -p" CLI (headless) when you ask it a question');
+        addClaudeSwitch('focus-mode', 'Focus Mode',
+            'The Claude pet sits quietly on window edges: no walking, no random jumps');
+        addClaudeSwitch('claude-session-sync', 'Sync With Claude Session',
+            'React to state updates written to /tmp/gnomelets-claude-state.json');
+
         window.add(page);
     }
 }

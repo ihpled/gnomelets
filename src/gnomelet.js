@@ -368,8 +368,11 @@ export const Gnomelet = GObject.registerClass(
          */
         update(windows, forceBackground, dockContainer) {
             if (!this.actor) return; // Guard against updates after destruction
+            this._onTickBefore(windows); // Subclass hook (no-op for plain gnomelets)
+            if (!this.actor) return;
             if (this._state === State.DRAGGING) {
                 this._updateAnimation();
+                this._onTickAfter();
                 return;
             }
 
@@ -613,6 +616,32 @@ export const Gnomelet = GObject.registerClass(
 
             this._updateAnimation();
             this.actor.set_position(Math.floor(this._x), Math.floor(this._y));
+            this._onTickAfter(); // Subclass hook (no-op for plain gnomelets)
+        }
+
+        /**
+         * Subclass hook: called at the start of every tick, before physics.
+         */
+        _onTickBefore(windows) { }
+
+        /**
+         * Subclass hook: called at the end of every tick, after the actor was positioned.
+         */
+        _onTickAfter() { }
+
+        /**
+         * Subclass hook: return a frame index to override the default frame selection,
+         * or null to use the default state-based selection.
+         */
+        _frameOverride() {
+            return null;
+        }
+
+        /**
+         * Protected: explicitly set the facing direction (used when vx is 0).
+         */
+        _setFacing(right) {
+            this._savedFacing = !!right;
         }
 
         /**
@@ -740,6 +769,11 @@ export const Gnomelet = GObject.registerClass(
          */
         _updateAnimation() {
             this._animationTimer++;
+            let override = this._frameOverride();
+            if (override !== null && override !== undefined) {
+                this.setFrame(override);
+                return;
+            }
             let frameIndex = 0;
             switch (this._state) {
                 case State.WALKING:
