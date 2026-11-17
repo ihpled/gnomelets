@@ -7,8 +7,19 @@ export const State = {
     WALKING: 'WALKING',
     IDLE: 'IDLE',
     JUMPING: 'JUMPING',
-    DRAGGING: 'DRAGGING'
+    DRAGGING: 'DRAGGING',
+    // Extended poses used by the Claude pet (never produced by plain gnomelets)
+    SIT: 'SIT',
+    CLIMB: 'CLIMB',
+    TYPING: 'TYPING',
+    THINKING: 'THINKING',
+    HAPPY: 'HAPPY',
+    SLEEPING: 'SLEEPING',
+    ERROR: 'ERROR'
 };
+
+export const CLAUDE_MAX_PETS = 5;
+export const CLAUDE_STATE_FILE = '/tmp/gnomelets-claude-state.json';
 
 /**
  * Utility to check if a window is maximized or full-screen

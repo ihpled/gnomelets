@@ -81,5 +81,26 @@
       <summary>Spawn Offset from Top</summary>
       <description>The vertical offset from the top of the screen where gnomelets spawn.</description>
     </key>
+    <key name="claude-pet-count" type="i">
+      <range min="0" max="5"/>
+      <default>1</default>
+      <summary>Number of Claude Pets</summary>
+      <description>How many Claude agent pets to spawn (0 to 5), in addition to the regular gnomelets.</description>
+    </key>
+    <key name="claude-chat-enabled" type="b">
+      <default>true</default>
+      <summary>Enable Claude Chat</summary>
+      <description>If true, the Claude pet can open a prompt bubble and run the local claude CLI headless (claude -p) to answer questions.</description>
+    </key>
+    <key name="focus-mode" type="b">
+      <default>false</default>
+      <summary>Focus Mode</summary>
+      <description>If true, the Claude pet stays perched on window top edges without walking or jumping around.</description>
+    </key>
+    <key name="claude-session-sync" type="b">
+      <default>true</default>
+      <summary>Sync With Claude Session</summary>
+      <description>If true, the Claude pet reacts to state updates written to /tmp/gnomelets-claude-state.json.</description>
+    </key>
   </schema>
 </schemalist>

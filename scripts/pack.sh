@@ -26,7 +26,10 @@ zip -r "$ZIP_NAME" extension.js \
     manager.js \
     gnomelet.js \
     indicator.js \
-    utils.js
+    utils.js \
+    claude-pet.js \
+    claude-ui.js \
+    claude-state-watcher.js
 
 # Add README.md from root
 echo "📄 Adding README.md..."
